@@ -1,5 +1,5 @@
-# `bfosc`
-An automated pipeline for the 2.16m BFOSC data reduction.
+# `pyexspec`
+An automated pipeline for reducing 2D spectra of instruments, e.g. the 2.16m BFOSC, 
 
 ## Installation
 

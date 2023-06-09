@@ -368,7 +368,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
                 print("  |- writing to {}".format(fp_out))
                 joblib.dump(res, fp_out)
 
-        print("""[6.0] make stats for the FEAR solutions """)
+        print("""[6.0] make stats for the ARCS solutions """)
         fps_fear_res = glob.glob("{}/fear-*".format(self._wd))
         fps_fear_res.sort()
         tfear = table.Table([joblib.load(_) for _ in fps_fear_res])
