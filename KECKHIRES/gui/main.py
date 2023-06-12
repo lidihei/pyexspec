@@ -83,7 +83,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/home/sdb216/sdOBdata/Documents/Feige64/data/spec/feige64_spec_all_20230210/KECKDATAfeige64_tolijiao/Feige64_0205_KECK/"
+        test_dir = "/home/sdb216/sdOBdata/Documents/Feige64/data/spec/KECK/"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
         self._lamp = joblib.load(f"../template/thar_template_ihdu-{self.ihdu}.z")
@@ -519,7 +519,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             dirdump = os.path.join(_dir, 'dump')
             if not os.path.exists(dirdump): os.makedirs(dirdump)
             fp_out = "{}/lamp-{}-ihdu-{}.dump".format(dirdump, os.path.basename(fp), self.ihdu)
-            res = self._proc_lamp(fp, 2.5, verbose = True, wavecalibrate=wavecalibrate)
+            res = self._proc_lamp(fp, 4, verbose = True, wavecalibrate=wavecalibrate)
             if res is not None:
                 print("  |- writing to {}".format(fp_out))
                 joblib.dump(res, fp_out)
@@ -632,7 +632,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
 
 
 
-    def _proc_lamp(self, fp, nsigma=2.5, verbose=False, wavecalibrate=True, deg=(4,3)):
+    def _proc_lamp(self, fp, nsigma=2.5, verbose=False, wavecalibrate=True, deg=(5,4)):
         """ read lamp """
         lamp = self.read_star(fp)
         lamp /= self.sensitivity
@@ -648,7 +648,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         if wavecalibrate: 
             wave_init = thar.corr_thar(self._lamp["wave"], self._lamp["flux"], lamp1d, maxshift=50) 
             """ find thar lines """
-            tlines = thar.find_lines(wave_init, lamp1d, self._lamp["linelist"], npix_chunk=20, ccf_kernel_width=2)
+            tlines = thar.find_lines(wave_init, lamp1d, self._lamp["linelist"], npix_chunk=15, ccf_kernel_width=2)
             ind_good = np.isfinite(tlines["line_x_ccf"]) & (np.abs(tlines["line_x_ccf"] - tlines["line_x_init"]) < 10) & (
                     (tlines["line_peakflux"] - tlines["line_base"]) > 100) & (
                                np.abs(tlines["line_wave_init_ccf"] - tlines["line"]) < 3)
@@ -685,9 +685,9 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         jd = Time(isot, format='isot').jd
         if wavecalibrate: 
             print("  |- {} lines left".format(np.sum(tlines["ind_good"])))
-            clean(pw=1, deg=2, threshold=0.8, min_select=20)
-            clean(pw=1, deg=2, threshold=0.4, min_select=20)
-            clean(pw=1, deg=2, threshold=0.2, min_select=20)
+            clean(pw=1, deg=3, threshold=0.8, min_select=20)
+            clean(pw=1, deg=3, threshold=0.4, min_select=20)
+            clean(pw=1, deg=3, threshold=0.2, min_select=20)
             print("  |- {} lines left".format(np.sum(tlines["ind_good"])))
             tlines = tlines[tlines["ind_good"]]
 
