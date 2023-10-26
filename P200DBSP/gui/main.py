@@ -1,6 +1,9 @@
 import sys, os, glob
-from PyQt5 import QtCore, QtGui, QtWidgets
-from bfosc import Ui_MainWindow
+try:
+    from PyQt5 import QtCore, QtGui, QtWidgets
+except:
+    from PyQt6 import QtCore, QtGui, QtWidgets
+from p200DBPS import Ui_MainWindow
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -87,11 +90,12 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/home/sdb216/sdOBdata/Documents/Feige64/data/spec/feige64_spec_all_20230210/P200feige64DATA-tolijiao/"
+        test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/P200_rawdata/"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
         self._lamp = joblib.load("../template/fear_template_blue.z")
         apfname = f'{self._wd}/ap.dump'
+        print(apfname)
         self.ap = joblib.load(apfname)
         self.ap_trace = self.ap.ap_center_interp
 
@@ -137,8 +141,11 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         imgtype = np.asarray([fits.getheader(fp)["OBJECT"] for fp in fps_full])
         imgtype1 = np.asarray([fits.getheader(fp)["IMGTYPE"] for fp in fps_full])
         exptime = np.asarray([fits.getheader(fp)["EXPTIME"] for fp in fps_full])
+        ra = np.asarray([fits.getheader(fp)["RA"] for fp in fps_full])
+        dec = np.asarray([fits.getheader(fp)["DEC"] for fp in fps_full])
+        UTSHUT = np.asarray([fits.getheader(fp)["UTSHUT"] for fp in fps_full])
         types = np.zeros_like(imgtype)
-        self.type_dict = OrderedDict(drop=0, bias=1, flat=2, lamp=3, star=4)
+        self.type_dict = OrderedDict(drop=0, bias=1, flat=2, arc=3, star=4)
         self.type_list = list(self.type_dict.keys())
         self.color_list = [[255, 255, 255],
                            [211, 211, 211],
@@ -153,15 +160,19 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
                 types[i] = "flat"
             elif ("arcs" in imgtype[i].lower()) or ('fear' in imgtype[i].lower())\
                 or ('cal' in imgtype1[i].lower()): #and (exptime[i] == 300 or "arcs" in fps_full[i].lower()):
-                types[i] = "lamp"
+                types[i] = "arc"
             #elif "light" in imgtype[i].lower() and (exptime[i] != 300 or "target" in fps_full[i].lower()):
             #    types[i] = "star"
             else:
                 types[i] = "star"
 
         self.datatable = table.Table(
-            data=[fps, imgtype, exptime, types],
-            names=["filename", "imagetype", "exptime", "type"])
+            data=[fps, imgtype, exptime, types, ra, dec, UTSHUT],
+            names=["filename", "imagetype", "exptime", "type", 'ra', 'dec', 'UTSHUT'])
+        dire_table = os.path.join(self._wd, 'TABLE')
+        if not os.path.exists(dire_table):
+            os.makedirs(dire_table)
+        self.datatable.write(os.path.join(dire_table, 'file_list_tab.csv'), overwrite=True)
         # print(self.datatable["type"])
 
     def _update_datatable(self):
@@ -181,13 +192,13 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         self.tableWidget_files.clear()
         self.tableWidget_files.verticalHeader().setVisible(False)
         self.tableWidget_files.setRowCount(self.nfp)
-        self.tableWidget_files.setColumnCount(4)
+        n_col = 7
+        self.tableWidget_files.setColumnCount(n_col)
         self.tableWidget_files.setHorizontalHeaderLabels(self.datatable.colnames)
         for irow in range(self.nfp):
             self.tableWidget_files.setItem(irow, 0, QtWidgets.QTableWidgetItem(str(self.datatable["filename"][irow])))
             self.tableWidget_files.setItem(irow, 1, QtWidgets.QTableWidgetItem(str(self.datatable["imagetype"][irow])))
             self.tableWidget_files.setItem(irow, 2, QtWidgets.QTableWidgetItem("{:.0f}".format(self.datatable["exptime"][irow])))
-
             comboBoxItem = QtWidgets.QComboBox()
             comboBoxItem.addItems(self.type_dict.keys())
             # print(self.type_dict[self.datatable["type"][irow]])
@@ -198,6 +209,9 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             for icol in range(3):
                 self.tableWidget_files.item(irow, icol).setBackground(
                     QtGui.QBrush(QtGui.QColor(*self.color_list[this_type_index])))
+            self.tableWidget_files.setItem(irow, 4, QtWidgets.QTableWidgetItem(str(self.datatable["ra"][irow])))
+            self.tableWidget_files.setItem(irow, 5, QtWidgets.QTableWidgetItem(str(self.datatable["dec"][irow])))
+            self.tableWidget_files.setItem(irow, 6, QtWidgets.QTableWidgetItem(str(self.datatable["UTSHUT"][irow])))
 
         self.tableWidget_files.resizeColumnsToContents()
         self.tableWidget_files.resizeRowsToContents()
@@ -829,8 +843,11 @@ def sort_apertures(ap_trace: np.ndarray):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     # mainWindow = QtWidgets.QMainWindow()
-    bfosc = UiBfosc()
+    mainprocess = UiBfosc()
     # ui.setupUi(mainWindow)
     # ui.initUi(mainWindow)
-    bfosc.show()
-    sys.exit(app.exec_())
+    mainprocess.show()
+    try:
+        sys.exit(app.exec_())# pyqt5
+    except:
+        sys.exit(app.exec())# pyqt6
