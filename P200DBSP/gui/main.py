@@ -19,6 +19,12 @@ from astropy.time import Time
 from skimage.filters import gaussian
 from scipy.signal import medfilt2d
 
+from astropy.nddata import CCDData
+from astropy.nddata import block_replicate
+import ccdproc as ccdp
+from photutils.segmentation import detect_sources
+from convenience_functions import show_image, display_cosmic_rays
+
 matplotlib.use('Qt5Agg')
 matplotlib.rcParams["font.size"] = 5
 
@@ -292,6 +298,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
                 print("appending BIAS: {}".format(self.fps_full[i]))
         master_bias = np.median(np.array([self._read_img(fp) for fp in fps_bias]), axis=0)
         self.master_bias = master_bias
+        self.master_bias_err_squared = np.std(master_bias)**2
         self._draw_img(self.master_bias)
         print(">>> BIAS processed!")
 
@@ -303,10 +310,20 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             if self.datatable["type"][i] == "flat":
                 fps_flat.append(self.fps_full[i])
                 print("appending FLAT: {}".format(self.fps_full[i]))
-        master_flat = np.median(np.array([self._read_img(fp) for fp in fps_flat]), axis=0)
+        flats = []
+        flats_err_squared = []
+        for fp in fps_flat:
+            flats.append(self.read_star(fp, remove_cosmic_ray=False))
+            flats_err_squared.append(self.image_err_squared)
+        self.flats = flats
+        #master_flat = np.median(np.array([self._read_img(fp) for fp in fps_flat]), axis=0)
+        master_flat = np.median(np.array(flats), axis=0)
+        master_flat_err_squared = np.median(np.array(flats_err_squared), axis=0)/len(fps_flat)
         self.master_flat = master_flat
-        self.master_flat -= self.master_bias
-        self._draw_img(gaussian_filter(self.master_flat, sigma=2))
+        self.master_flat_err_squared = master_flat_err_squared
+        #self.master_flat -= self.master_bias
+        #self._draw_img(gaussian_filter(self.master_flat, sigma=2))
+        self._draw_img(self.master_flat)
         # import joblib
         # joblib.dump(self.master_flat, "/Users/cham/projects/bfosc/20200915_bfosc/master_flat.dump")
         print(">>> FLAT processed!")
@@ -428,6 +445,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         self._draw_aperture()
 
     def _save_aperture(self):
+        ap_width = 12
         #from twodspec.aperture import Aperture
         from aperture import Aperturenew as Aperture
         # print(self.ap_trace[:,0])
@@ -444,10 +462,11 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         self.ap_trace = self.ap.ap_center_interp # lijiao
         # fit again
         #self.ap = Aperture(ap_center=self.ap_trace[:, ::-1], ap_width=10)
-        self.ap = Aperture(ap_center=self.ap_trace, ap_width=10)
+        self.ap = Aperture(ap_center=self.ap_trace, ap_width=ap_width)
         #self.ap.get_image_info(np.rot90(self.master_flat)) # lijiao
         self.ap.get_image_info(self.master_flat) # lijiao
         self.ap.polyfitnew(deg=2, ystart=700)
+        self.ap.ap_width = ap_width
         self._draw_aperture()
         import joblib
         joblib.dump(self.ap, os.path.join(self._wd+"ap.dump"))
@@ -475,27 +494,42 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         header['WAT2_001']= 'wtype=linear'
         return header
 
-    def _proc_all(self):
+    def remove_cosmic_ray(self, image, readnosize=2, sigclip=7, verbose=True):
+        '''
+        image [2D array]:
+        '''
+        ccd = CCDData(image, unit='adu')
+        new_ccd = ccdp.cosmicray_lacosmic(ccd, readnoise=readnoise, sigclip=sigclip, verbose=verbose)
+        return new_ccd
+
+    def _proc_all(self, show=False, irow=1000):
         if self._lamp is None:
             print("LAMP not loaded!")
         nrow, ncol = self.master_flat.shape
         wavecalibrate = self.wavecalibrate
+        
         # compute blaze & sensitivity
         #flat_bg = self.ap.background(np.rot90(self.master_flat), q=(40, 40), npix_inter=7, sigma=(20, 20), kernel_size=(21, 21))
         #self.blaze, self.sensitivity = self.ap.make_normflat(np.rot90(self.master_flat)-flat_bg, )
         #flat_bg = self.ap.background(self.master_flat, q=(40, 40), npix_inter=7, sigma=(20, 20), kernel_size=(15, 15))
         #from skimage.filters import gaussian
         #from scipy.signal import medfilt2d
+        from twodspec.extract import extract_aperture
         flat_bg = medfilt2d(self.master_flat, kernel_size=(21, 21))
         #flat_bg = gaussian(flat_bg, sigma=(20, 20))
         #flat_bg= self.ap.backgroundnew(self.master_flat, q=(40, 40), npix_inter=7, sigma=(20, 20), kernel_size=(21, 21))
         self.flat_bg = flat_bg
         self.blaze, self.sensitivity = self.ap.make_normflat(self.master_flat)
-
+        master_flat = self.master_flat.copy()
+        max_master_flat = np.nanmax(master_flat)
+        master_flat /=  max_master_flat
+        master_flat_err_squared = self.master_flat_err_squared.copy()
+        master_flat_err_squared /= max_master_flat**2
         print("""[4.1] extracting star1d (~5s/star) """)
         # loop over stars
         fps_star = self._gather_files("star")
         n_star = len(fps_star)
+        if show: fig, ax = plt.subplots(1,1)
         for i_star, fp in enumerate(fps_star):
             print("  |- ({}/{}) processing STAR ... ".format(i_star, n_star), end="")
             _dir = os.path.dirname(fp)
@@ -503,15 +537,30 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             self.dirdump = dirdump
             if not os.path.exists(dirdump): os.makedirs(dirdump)
             fp_out = "{}/star-{}.dump".format(dirdump, os.path.basename(fp))
-            star = self.read_star(fp)
+            star = self.read_star(fp).copy()
+            star_err_squared = self.image_err_squared
+            star_divide_flat = star/master_flat
+            star_divide_flat_err_squared = star_err_squared/master_flat**2 + star**2*master_flat_err_squared/master_flat**4
             header = self._modify_header(fp)
             isot =  f'{header["UTSHUT"]}'
             jd = Time(isot, format='isot').jd
-            star -= self.ap.backgroundnew(star, q=(10, 10), npix_inter=5, sigma=(20, 20), kernel_size=(21, 21))
+            ap_star = self.ap
+            bg = ap_star.backgroundnew(star, longslit = True, Napw_bg=3, deg=2, num_sigclip=5, Napw=2, verbose=False)
+            if show:
+               plt.plot(star[irow])
+               plt.plot(bg[irow])
+            star -= bg
             star /= self.sensitivity
             gain = 1/header['GAIN']
             ron = header['RON']
-            star1d = self.ap.extract_all(star, gain=gain, ron=ron, n_jobs=1, verbose=False)
+            #star1d = self.ap.extract_all(star, gain=gain, ron=ron, n_jobs=1, verbose=False)
+            star1d = extract_aperture(star, ap_star.ap_center, im_err_squared = star_err_squared, n_chunks=8, 
+                    ap_width=ap_star.ap_width, profile_oversample=10, profile_smoothness=1e-2,
+                    num_sigma_clipping=5., gain=gain, ron=ron)
+            star1d_divide_flat = extract_aperture(star_divide_flat, ap_star.ap_center, 
+                    im_err_squared = star_divide_flat_err_squared, n_chunks=8, 
+                    ap_width=ap_star.ap_width, profile_oversample=10, profile_smoothness=1e-2,
+                    num_sigma_clipping=5., gain=gain, ron=ron)
             print("writing to {}".format(fp_out))
             star1d["blaze"] = self.blaze
             star1d["UTC-OBS"] = isot
@@ -520,11 +569,16 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             star1d["header"] = header
             star1d['STRIM'] = ('[{}:{}, {}:{}]'.format(*self.strimx, *self.strimy), 'PYEXSPEC data reduce')
             #star1d["header"] = header
+            #self.star1d_divide_flat = star1d_divide_flat
+            #self.star1d = star1d
+            for _key in star1d_divide_flat.keys():
+                key_ = f'{_key}_divid_flat'
+                star1d[key_] = star1d_divide_flat[_key]
             joblib.dump(star1d, fp_out)
 
         print("[5.1] load LAMP template & LAMP line list")
         """ loop over LAMP """
-        fps_lamp = self._gather_files("lamp")
+        fps_lamp = self._gather_files("arc")
         n_lamp = len(fps_lamp)
         for i_lamp, fp in enumerate(fps_lamp):
             print("  |- ({}/{}) processing LAMP {} ... ".format(i_lamp, n_lamp, fp))
@@ -532,7 +586,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             dirdump = os.path.join(_dir, 'dump')
             if not os.path.exists(dirdump): os.makedirs(dirdump)
             fp_out = "{}/lamp-{}.dump".format(dirdump, os.path.basename(fp))
-            res = self._proc_lamp(fp, nsigma=4, verbose=False, wavecalibrate=True, deg=3)
+            res = self._proc_lamp(fp, ap_star, num_sigclip=3, verbose=False, wavecalibrate=True, deg=4, show=True)
             if res is not None:
                 print("  |- writing to {}".format(fp_out))
                 joblib.dump(res, fp_out)
@@ -546,7 +600,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             """ a statistic figure of reduced lamp """
             fig = plt.figure(figsize=(9, 7))
             ax = plt.gca()
-            ax.plot(tlamp['jd'], tlamp["rms"] / 4500 * 3e5, 's-', ms=10, label="RMS")
+            ax.plot(tlamp['jd'], np.median(tlamp["rms"]) / 4500 * 3e5, 's-', ms=10, label="RMS")
             ax.set_xlabel("JD")
             ax.set_ylabel("RMS [km s$^{-1}$]")
             ax.set_title("The precision of LAMP calibration @4500A")
@@ -562,7 +616,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         pass
 
 
-    def _extract_sum(self, im,ap_center_interp, ap_width=15, gain=1., ron=0):
+    def _extract_sum(self, im, ap_center_interp,im_err_sqaured=None, ap_width=15, gain=1., ron=0):
         """ extract an aperture by sum the values given the aperture center
 
         Parameters
@@ -592,12 +646,16 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         ap_im = np.where(ap_im > 0, ap_im, 0)
 
         # error image
-        ap_im_errerr = ap_im / gain + ron ** 2.
+        if im_err_sqaured is None:
+            ap_im_err_squared = ap_im / gain + ron ** 2.
+        else:
+            ap_im_err_squared = get_aperture_section(
+            im_err_sqaured, ap_center_interp, ap_width=ap_width)
 
         return dict(
             # ----- simple extraction -----
             spec_sum=ap_im.sum(axis=1),
-            err_sum=np.sqrt(ap_im_errerr.sum(axis=1)),
+            err_sum=np.sqrt(ap_im_err_squared.sum(axis=1)),
             # ----- reconstructed profile -----
             # ----- reconstructed aperture -----
             ap_im=ap_im,
@@ -608,7 +666,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         )
 
 
-    def extract_sum(self, im, gain=1., n_jobs=-1, ron=0,
+    def extract_sum(self, im, ap_star=None, gain=1., n_jobs=-1, ron=0,
                     verbose=False, backend="multiprocessing"):
         """ extract all apertures with simple summary
         Parameters
@@ -633,8 +691,9 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
 
         """
         # extract all apertures in parallel
+        if ap_star is None: ap_star = self.ap
         rs = joblib.Parallel(n_jobs=n_jobs, verbose=verbose, backend=backend)(joblib.delayed(self._extract_sum)(
-            im, self.ap.ap_center_interp[i],ap_width=self.ap.ap_width, gain=gain, ron=ron) for i in range(self.ap.nap))
+            im, ap_star.ap_center_interp[i],ap_width=ap_star.ap_width, gain=gain, ron=ron) for i in range(ap_star.nap))
         # reconstruct results
         result = dict(
             # simple extraction
@@ -696,9 +755,18 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             print("@grating_equation: {} iterations, rms = {:.5f} A".format(iiter, pf1.rms))
         return pf1, indselect
 
-    def _proc_lamp(self, fp, nsigma=2.5, verbose=False, wavecalibrate=True, deg=4):
-        """ read lamp """
+    def _proc_lamp(self, fp, ap_star, num_sigclip=2.5,
+                  line_peakflux=50,line_type = 'line_x_ccf',
+                  verbose=False, wavecalibrate=True, deg=4, show=False,
+                  min_select_lines = 10,
+                  QA_fig_path = None, suffix=None):
+        """ read lamp
+        parameters:
+        --------------------
+        suffix [str]  the suffix of file name of QA for calibrating wave
+        """
         lamp = self.read_star(fp)
+        lampbasename = os.path.basename(fp)
         lamp /= self.sensitivity
         header = fits.getheader(fp)
         gain = 1/header['GAIN']
@@ -706,116 +774,158 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         # unnecessary to remove background
         # fear -= apbackground(fear, ap_interp, q=(10, 10), npix_inter=5,sigma=(20, 20),kernel_size=(21,21))
         # extract 1d fear
-        lamp1d = self.extract_sum(lamp,gain=gain, n_jobs=1, ron=ron)["spec_sum"]
+        lamp1d = self.extract_sum(lamp, ap_star=ap_star, gain=gain, n_jobs=1, ron=ron)["spec_sum"]
         # remove baseline
         # fear1d -= np.median(fear1d)
-
+        
         """ corr2d to get initial estimate of wavelength """
-        from twodspec import thar
+        from wave_calib import wavecalibrate_longslit
         if wavecalibrate:
-            wave_init = thar.corr_thar(self._lamp["wave"][:, ::-1], self._lamp["flux"][:, ::-1], lamp1d[:, ::-1], maxshift=50) 
-            """ find thar lines """
-            tlines = thar.find_lines(wave_init, lamp1d[:, ::-1], self._lamp["linelist"], npix_chunk=8, ccf_kernel_width=1.5)
-            ind_good = np.isfinite(tlines["line_x_ccf"]) & (np.abs(tlines["line_x_ccf"] - tlines["line_x_init"]) < 10) & (
-                    (tlines["line_peakflux"] - tlines["line_base"]) > 100) & (
-                               np.abs(tlines["line_wave_init_ccf"] - tlines["line"]) < 3)
-            tlines.add_column(table.Column(ind_good, "ind_good"))
-            # tlines.show_in_browser()
-            wave_init1 = wave_init[:, ::-1] 
+            wave_calibrate = wavecalibrate_longslit(wave_template =None, flux_template=None, linelist =  self._lamp["linelist"])
+            xshifts = []
+            wave_init = []
+            wave_solu = []
+            pf1 = []
+            rms = []
+            tab_lines = []
+            mpflux = []
+            if QA_fig_path is None:
+               QA_fig_path = os.path.join(self._wd, 'QA', 'wave_calibrate')
+            if show and (not os.path.exists(QA_fig_path)):
+               os.makedirs(QA_fig_path)
+            suffix = '' if suffix is None else suffix
+            for _i, _flux in enumerate(lamp1d):
+                _flux = _flux[::-1]
+                xcoord = np.arange(len(_flux))
+                wave_template = self._lamp["wave"][_i][::-1]
+                flux_template = self._lamp["flux"][_i][::-1]
+                x_template = np.arange(len(wave_template))
+                #dic = {'lamp1d': lamp1d,
+                #   'xcoord': xcoord,
+                #   '_flux': _flux,
+                #   'wave_template': wave_template,
+                #   'flux_template': flux_template,
+                #   'x_template':x_template,
+                #   'linelist':self._lamp["linelist"]
+                #  }
+                #joblib.dump(dic, 'dic.z')
+                _xshift = wave_calibrate.get_xshift(xcoord, _flux, x_template=x_template, flux_template = flux_template,show=show)
+                print(f'_xshift_', _xshift)
+                _wave_init = wave_calibrate.estimate_wave_init(xcoord, xshift=_xshift, x_template=x_template, wave_template = wave_template, 
+                                                            deg=deg, nsigma=num_sigclip, min_select=min_select_lines)
+                _tab = wave_calibrate.find_lines(wave_init=_wave_init, flux=_flux, npix_chunk=8, ccf_kernel_width=2)
+                _wave_solu = wave_calibrate.calibrate(xcoord, _tab, flux=_flux, deg=deg, num_sigclip=num_sigclip,
+                                              line_peakflux=line_peakflux, line_type=line_type ,min_select_lines=min_select_lines, show=show)
+                _tab_lines = wave_calibrate.tab_lines.copy()
+                _tab_lines['order'] = _i
+                xshifts.append(-_xshift)
+                wave_init.append(_wave_init[::-1])
+                wave_solu.append(_wave_solu[::-1])
+                #pf1.append(wave_calibrate.pf1)
+                rms.append(wave_calibrate.rms)
+                tab_lines.append(_tab_lines)
+                _mpflux = np.median(_tab_lines["line_peakflux"][_tab_lines['indselect']])
+                mpflux.append(_mpflux)
+                fig_init_solu, axs = plt.subplots(1, 1, figsize=(7, 4))
+                #plt.subplots_adjust(hspace=0)
+                plt.plot(wave_template, flux_template/np.median(flux_template),lw=1, color='b', label='template')
+                plt.plot(_wave_init, _flux/np.median( _flux), lw=1, color='r', label='init')
+                plt.plot(_wave_solu, _flux/np.median( _flux), lw=1, label='solution', color='k')
+                plt.legend()
+                plt.xlabel(r'Wavelength ${\rm \AA}$')
+                plt.ylabel(r'Counts')
+                ####------------ save figure
+                fname_fig_QA_ccf= os.path.join(QA_fig_path, f'{lampbasename}_QA_ccf{_i:03d}{suffix}.pdf')
+                wave_calibrate.fig_QA_ccf.savefig(fname_fig_QA_ccf)
+                ##--------------
+                fname_fig_wave_calibrate= os.path.join(QA_fig_path, f'{lampbasename}_wave_calibrate{_i:03d}{suffix}.pdf')
+                wave_calibrate.fig_QA_wave_calibrate.savefig(fname_fig_wave_calibrate)
+                ##-------------
+                fname_fig_init_solu= os.path.join(QA_fig_path, f'{lampbasename}_init_solu{_i:03d}{suffix}.pdf')
+                fig_init_solu.savefig(fname_fig_init_solu)
         else:
-            wave_init1 = None; tlines=None
-
-        """ clean each order """
-        from twodspec.polynomial import Poly1DFitter
-
-        def clean(pw=1, deg=3, threshold=0.1, min_select=10):
-            order = tlines["order"].data
-            ind_good = tlines["ind_good"].data
-            linex = tlines["line_x_ccf"].data
-            z = tlines["line"].data
-
-            u_order = np.unique(order)
-            for _u_order in u_order:
-                ind = (order == _u_order) & ind_good
-                if np.sum(ind) > min_select:
-                    # in case some orders have only a few lines
-                    p1f = Poly1DFitter(linex[ind], z[ind], deg=deg, pw=pw)
-                    res = z[ind] - p1f.predict(linex[ind])
-                    ind_good[ind] &= np.abs(res) < threshold
-            tlines["ind_good"] = ind_good
-            return
+            pf1 = None; rms =np.nan; mpflux=None; nlines=None
+            wave_solu = None
 
         header = self._modify_header(fp)
         isot =  f'{header["UTSHUT"]}'
         jd = Time(isot, format='isot').jd
-        if wavecalibrate: 
-            print("  |- {} lines left".format(np.sum(tlines["ind_good"])))
-            clean(pw=1, deg=deg, threshold=0.8, min_select=20)
-            clean(pw=1, deg=deg, threshold=0.4, min_select=20)
-            clean(pw=1, deg=deg, threshold=0.2, min_select=20)
-            print("  |- {} lines left".format(np.sum(tlines["ind_good"])))
-            tlines = tlines[tlines["ind_good"]]
+        if wavecalibrate is False:
+           print("!!! The wavelenth of this LAMP is not calibrated")
+        # reasonable
+        # mpflux
+        # rms
+        # predict wavelength solution
+        nx, norder = lamp1d.shape
+        mx, morder = np.meshgrid(np.arange(norder), np.arange(nx))
+        # result
+        from astropy.table import vstack
+        _tab = vstack(tab_lines)
+        calibration_dict = OrderedDict(
+            fp=fp,
+            jd=jd,
+            exptime=header['EXPTIME'],
+            header = header,
+            STRIM = '[{}:{}, {}:{}]'.format(*self.strimx, *self.strimy),
+            wave_init=wave_init,
+            wave_solu=wave_solu,
+            tab_lines=tab_lines,
+            nlines=np.sum(_tab['indselect']),
+            rms=rms,
+            #pf1=pf1,
+            deg=(deg, 'The degree of the 1D polynomial'),
+            meidan_peak_flux=mpflux,
+            # lamp=lamp,
+            flux_arc=lamp1d,
+            blaze = self.blaze,
+        )
+        return calibration_dict
 
-            """ fitting grating equation """
-            x = tlines["line_x_ccf"]  # line_x_ccf/line_x_gf
-            y = tlines["order"]
-            z = tlines["line"]
-            pf1, indselect = self.grating_equation(
-                   x, z, deg=deg, nsigma=nsigma, min_select=210, verbose=True)
-            tlines.add_column(table.Column(indselect, "indselect"))
-            mpflux = np.median(tlines["line_peakflux"][tlines["indselect"]])
-            rms = np.std((pf1.predict(x) - z)[indselect])
-            nlines = np.sum(indselect)
-            mx = np.array([np.arange(self.nwv)])[:,::-1]
-            wave_solu = pf1.predict(mx)  # polynomial fitter
-            print("  |- nlines={}  rms={:.4f}A  mpflux={:.1f}".format(nlines, rms, mpflux))
-            print(f'###----------------\npf1.rms = {pf1.rms}\n###------------------')
-        else:
-            pf1 = None; rms =np.nan; mpflux=None; nlines=None
-            wave_solu = None
-        if (0.01 < rms < 1) or (wavecalibrate is False):
-            if wavecalibrate is False:
-               print("!!! The wavelenth of this LAMP is not calibrated")
-            # reasonable
-            # mpflux
-            # rms
-            # predict wavelength solution
-            nx, norder = lamp1d.shape
-            mx, morder = np.meshgrid(np.arange(norder), np.arange(nx))
-            # result
-            calibration_dict = OrderedDict(
-                fp=fp,
-                jd=jd,
-                exptime=header['EXPTIME'],
-                header = header,
-                STRIM = '[{}:{}, {}:{}]'.format(*self.strimx, *self.strimy),
-                wave_init=wave_init1,
-                wave_solu=wave_solu,
-                tlines=tlines,
-                nlines=nlines,
-                rms=rms,
-                pf1=pf1,
-                deg=(deg, 'The degree of the 1D polynomial'),
-                mpflux=mpflux,
-                # lamp=lamp,
-                lamp1d=lamp1d,
-                blaze = self.blaze,
-            )
-            return calibration_dict
-        else:
-            print("!!! result is not acceptable, this LAMP is skipped")
-            return None
+    def cal_image_error_square(self, image, bias_err_squared, gain, readnoise):
+        '''
+        calculate error**2 of each pixel of image
+        paramters:
+        -------------------------
+        image [2D array]
+        bias_err_squared [float], np.std(master_biase)**2
+        gain [float]
+        readnoise [float]
+        returns:
+        image_err_squared
+        '''
+        image_err_squared = image*gain
+        _ind = image_err_squared < 0
+        image_err_squared[_ind] = 0
+        image_err_squared = image_err_squared + readnoise**2+bias_err_squared
+        image_err_squared/gain**2
+        return image_err_squared
 
-    def read_star(self, fp_star):
+    def read_star(self, fp_star, master_bias=None, master_bias_err_squared=None, gain=None, readnoise=None, remove_cosmic_ray=False):
+        '''
+        fp_star [str] file name including full path
+        gain [float] in units of e-/ADU
+        readnoise [float] system noise in units of e-
+        '''
+        master_bias = self.master_bias if master_bias is None else master_bias
         hdu = fits.open(fp_star)
         ihdu = self.ihdu
         data = hdu[ihdu].data
         xs, xe = self.strimx
         ys, ye = self.strimy
         data = data[ys:ye, xs:xe]
+        if gain is None: gain = hdu[ihdu].header['gain']
+        if readnoise is None: readnoise = hdu[ihdu].header['RON']
         hdu.close()
         #return np.rot90(data - self.master_bias)
-        return data - self.master_bias
+        image = data- master_bias
+        bias_err_squared = np.std(master_bias)**2
+        bias_err_squared = self.master_bias_err_squared if  master_bias_err_squared is None else master_bias_err_squared
+        image_err_squared = self.cal_image_error_square(image, bias_err_squared, gain, readnoise)
+        self.image = image
+        self.image_err_squared = image_err_squared
+        if remove_cosmic_ray:
+           pass
+        return image
 
     def contourf(self, img):
         rows, _cols = img.shape

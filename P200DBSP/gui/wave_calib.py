@@ -1,6 +1,8 @@
 from twodspec.polynomial import Poly1DFitter
 from scipy.fftpack import fft
 from scipy.fftpack import ifft
+import numpy as np
+import matplotlib.pyplot as plt
 
 class wavecalibrate_longslit():
 
@@ -55,8 +57,10 @@ class wavecalibrate_longslit():
         ----------------
         wave_init [1D array] the initall wavelength
         '''
-        x_template = self.x_template if x_template is None else x_template
-        wave_template = self.wave_template if wave_template is None else wave_template
+        if x_template is None:
+           x_template = self.x_template
+        if wave_template is None:
+           wave_template = self.wave_template
         pf1, _indselect = self.grating_equation(x_template, wave_template, **argwords)
         #self.pf1 = pf1
         if x is None: x = self.x_pypiet
@@ -119,29 +123,32 @@ class wavecalibrate_longslit():
             print("@grating_equation: {} iterations, rms = {:.5f} A".format(iiter, pf1.rms))
         return pf1, indselect
 
-    def calibrate(self, xcoord, tabline, deg=4, line_peakflux= 50, nsigma=2.5, line_type = 'line_x_ccf'
-                  verbose:bool =False, show:bool =False):
+    def calibrate(self, xcoord, tabline, flux=None, deg=4, line_peakflux= 50, num_sigclip=2.5, line_type = 'line_x_ccf',
+                  min_select_lines = 10, verbose:bool =False, show:bool =False):
         '''
         Fitting index, lines in tabline using grating_equation, and predict wavelength for xcoord
         parameters:
         --------------------
         xcoord [1D array] index of wave of the sample spectrum
         tabline [astropy.table]: a table of the emission lines of the sample spectrum.
+        flux [1D array] flux of the sample spectum, could be None (only for plot QA)
         line_type [str]: e.g. line_x_gf	, line_x_ccf (the index coordinates of the peak of emission lines)
+        min_select_lines [int]: the minimum lines for fitting.
         returns:
         --------------------
         wave_solu [1D array] the wavelength of xcoord fitted by emission line in tabline
         '''
         from astropy import table
         tlines = tabline
-        ind_good = np.isfinite(tlines[line_type]) & (np.abs(tlines[line_type] - tlines["line_x_init"]) < 10) & (
+        ind_good = np.isfinite(tlines["line_x_ccf"]) & (np.abs(tlines["line_x_ccf"] - tlines["line_x_init"]) < 10) & (
                     (tlines["line_peakflux"] - tlines["line_base"]) > line_peakflux) & (
                                np.abs(tlines["line_wave_init_ccf"] - tlines["line"]) < 3)
+        indselect0 = np.zeros(len(tlines), dtype=bool)
         tlines.add_column(table.Column(ind_good, "ind_good"))
         def clean(pw=1, deg=3, threshold=0.1, min_select=10):
             order = tlines["order"].data
             ind_good = tlines["ind_good"].data
-            linex = tlines[line_type].data
+            linex = tlines["line_x_ccf"].data
             z = tlines["line"].data
 
             u_order = np.unique(order)
@@ -163,13 +170,16 @@ class wavecalibrate_longslit():
         tlines = tlines[tlines["ind_good"]]
 
         """ fitting grating equation """
-        x = tlines[line_type]  # line_x_ccf/line_x_gf
+        x = tlines["line_x_ccf"]  # line_x_ccf/line_x_gf
         y = tlines["order"]
         z = tlines["line"]
         pf1, indselect = self.grating_equation(
-               x, z, deg=deg, nsigma=nsigma, min_select=210, verbose=verbose)
-        tlines.add_column(table.Column(indselect, "indselect"))
-        mpflux = np.median(tlines["line_peakflux"][tlines["indselect"]])
+               x, z, deg=deg, nsigma=num_sigclip, min_select=min_select_lines, verbose=verbose)
+        print("  |- {} lines selected".format(np.sum(indselect)))
+        #tlines.add_column(table.Column(indselect, "indselect"))
+        indselect0[tab_lines["ind_good"]] = indselect
+        tab_lines.add_column(table.Column(indselect0, "indselect"))
+        mpflux = np.median(tab_lines["indselect"])
         rms = np.std((pf1.predict(x) - z)[indselect])
         nlines = np.sum(indselect)
         wave_solu = pf1.predict(xcoord)  # polynomial fitter
@@ -177,32 +187,44 @@ class wavecalibrate_longslit():
         self.tab_lines = tab_lines
         self.func_polyfit = pf1
         self.rms = rms
+        self.tab_lines = tab_lines
+        print("  |- nlines={}  rms={:.4}A  median peak flux={:.1f}".format(nlines, rms, mpflux))
         if show:
             ##### plot QA of wavelength calibration
-            fig, axs = plt.subplots(2,1,figsize=(7,6), gridspec_kw={'height_ratios': [2,1]}, sharex=True)
+            fig1, axs = plt.subplots(3,1,figsize=(7,9), gridspec_kw={'height_ratios': [3,1,3]}, sharex=True)
             plt.subplots_adjust(hspace=0)
             plt.suptitle(f'rms = {rms:.3}')
             plt.sca(axs[0])
-            _tab = tlines[tlines['ind_good']]
-            plt.plot(self.x_pypiet, self.wave_solu)
+            _tab = tab_lines[indselect0]
+            plt.plot(xcoord, wave_solu)
             plt.scatter(_tab['line_x_ccf'], _tab['line'], marker='x')
             plt.ylabel('Wavelength')
             plt.sca(axs[1])
             plt.scatter(_tab['line_x_ccf'], _tab['line']-pf1.predict(_tab['line_x_ccf']), marker='x')
-            plt.xlabel('x index (pixel)')
             plt.ylabel('Residual')
+            plt.sca(axs[2])
+            _tab = tab_lines
+            plt.scatter(_tab['line_x_ccf'], _tab['line_peakflux'], marker='+', label=r'$Peak_{\rm CCF}$')
+            _tab = tab_lines[indselect0]
+            plt.scatter(_tab['line_x_ccf'], _tab['line_peakflux'], marker='o', label=r'$Peak_{\rm CCF}: good$', facecolors='none', edgecolors='r')
+            plt.plot(xcoord, flux, lw=1, c='k')
+            plt.legend()
+            #plt.xlabel(r'Wavelength ${\rm \AA}$')
+            plt.xlabel('x index (pixel)')
+            plt.ylabel(r'Counts')
+            self.fig_QA_wave_calibrate = fig1
         return wave_solu
 
     def get_xshift(self, xcoord, flux, x_template: np.array = None,
-                   flux_template:np.array = None, step: float = 0.1):
+                   flux_template:np.array = None, step: float = 0.1, show=False):
         '''
         get the shifted x-axis coordinates of the sample spectrum comparing with template
         returns:
         --------------
         xshift [float]: the x-axis coordinate of the maximum CCF point in unit of pixel.
         '''
-        shfits, ccf = self.calCCF(xcoord, flux, x_template, flux_template)
-        print(np.argmax(ccf))
+        shfits, ccf = self.calCCF(xcoord, flux, x_template, flux_template, show=show)
+        #print(np.argmax(ccf))
         xshift = shfits[np.argmax(ccf)]
         self.xshift = xshift
         return xshift
@@ -240,12 +262,18 @@ class wavecalibrate_longslit():
         if show:
            fig, axs = plt.subplots(2, 1, figsize=(7, 6))
            plt.sca(axs[0])
-           plt.plot(xcoord, flux/np.median(flux), label='sample')
-           plt.plot(x_template, flux_template/np.median(flux_template), label='template')
+           plt.title(f'meidian flux template={np.median(flux_template):.2f}; sample={np.median(flux):.2f} counts')
+           plt.plot(xcoord, flux/np.median(flux), label='sample', lw=1)
+           plt.plot(x_template, flux_template/np.median(flux_template), label='template', lw=1)
+           plt.title(f'meidian flux template={np.median(flux_template):.2f}; sample={np.median(flux):.2f} counts')
            plt.xlabel('x index (pixel)')
            plt.ylabel('Flux/median(Flux)')
+           plt.legend()
            plt.sca(axs[1])
-           plt.plot(shifts, ccf)
+           xshift = shifts[np.argmax(ccf)]
+           plt.title(f'shift ={xshift}')
+           plt.plot(shifts, ccf, lw=1)
            plt.xlabel('x shifts (pixel)')
            plt.ylabel('CCF')
+           self.fig_QA_ccf = fig
         return shifts, ccf
