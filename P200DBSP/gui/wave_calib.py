@@ -40,7 +40,6 @@ class wavecalibrate_longslit():
         if len(wave_init.shape) ==1:
             wave_init = np.array([wave_init])
             flux = np.array([flux])
-        print(wave_init.shape)
         tab_lines = thar.find_lines(wave_init, flux, self.linelist, npix_chunk=npix_chunk, ccf_kernel_width=ccf_kernel_width)
         return tab_lines
 
@@ -115,12 +114,12 @@ class wavecalibrate_longslit():
                 indselect &= np.abs(z_res) < nsigma * sigma
                 iiter += 1
             if verbose:
-                print("@grating_equation: iter-{} \t{} lines kicked, {} lines left, rms={:.5f} A".format(
+                print("  |-@grating_equation: iter-{} \t{} lines kicked, {} lines left, rms={:.5f} A".format(
                     iiter, n_reject, np.sum(indselect), sigma))
         pf1.rms = sigma
 
         if verbose:
-            print("@grating_equation: {} iterations, rms = {:.5f} A".format(iiter, pf1.rms))
+            print("  |-@grating_equation: {} iterations, rms = {:.5f} A".format(iiter, pf1.rms))
         return pf1, indselect
 
     def calibrate(self, xcoord, tabline, flux=None, deg=4, line_peakflux= 50, num_sigclip=2.5, line_type = 'line_x_ccf',
@@ -179,7 +178,7 @@ class wavecalibrate_longslit():
         #tlines.add_column(table.Column(indselect, "indselect"))
         indselect0[tab_lines["ind_good"]] = indselect
         tab_lines.add_column(table.Column(indselect0, "indselect"))
-        mpflux = np.median(tab_lines["indselect"])
+        mpflux = np.median(tab_lines[tab_lines["indselect"]]['line_peakflux'])
         rms = np.std((pf1.predict(x) - z)[indselect])
         nlines = np.sum(indselect)
         wave_solu = pf1.predict(xcoord)  # polynomial fitter
