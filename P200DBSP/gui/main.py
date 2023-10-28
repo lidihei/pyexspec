@@ -24,6 +24,10 @@ from astropy.nddata import block_replicate
 import ccdproc as ccdp
 from photutils.segmentation import detect_sources
 from convenience_functions import show_image, display_cosmic_rays
+from astropy.coordinates import SkyCoord
+from astropy import units
+import warnings
+warnings.filterwarnings('ignore')
 
 matplotlib.use('Qt5Agg')
 matplotlib.rcParams["font.size"] = 5
@@ -179,6 +183,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         dire_table = os.path.join(self._wd, 'TABLE')
         if not os.path.exists(dire_table):
             os.makedirs(dire_table)
+        self.datatable_arc = self.datatable[self.datatable['type']=='arc']
         self.datatable.write(os.path.join(dire_table, 'file_list_tab.csv'), overwrite=True)
         # print(self.datatable["type"])
 
@@ -542,12 +547,12 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
                    _ap_width = self.estimte_ap_width(flux, A, mu-strim_l, 5, 0, 0, Nsigma=Nsigma, show=False)
                    ap_widths.append(_ap_width)
         ap_width = int(np.ceil(np.median(ap_widths)))
-        print(f'ap_width = {ap_width}')
+        print(f'  |-ap_width = {ap_width}')
         self.ap = Aperture(ap_center=self.ap_trace, ap_width=ap_width)
         self.ap.get_image_info(image_star)
         self.ap.polyfitnew(deg=2, ystart=starting_row)
         joblib.dump(self.ap, os.path.join(self._wd, "ap.dump"))
-        print("Adjust_star aperture")
+        print("  |-Adjust_star aperture")
 
     def _update_nap(self):
         self.lineEdit_nap.setText("N(ap)={}".format(self.ap_trace.shape[0]))
@@ -607,7 +612,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         n_star = len(fps_star)
         if show: fig, ax = plt.subplots(1,1)
         for i_star, fp in enumerate(fps_star):
-            print("  |- ({}/{}) processing STAR ... ".format(i_star, n_star), end="")
+            print("  |- ({}/{}) processing STAR ... ".format(i_star+1, n_star), end="")
             _dir = os.path.dirname(fp)
             dirdump = os.path.join(_dir, 'dump')
             self.dirdump = dirdump
@@ -623,6 +628,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             isot =  f'{header["UTSHUT"]}'
             jd = Time(isot, format='isot').jd
             ap_star = self.ap
+            ####------------ fit back ground --------------------
             bg = ap_star.backgroundnew(star, longslit = True, Napw_bg=3, deg=2, num_sigclip=5, Napw=2, verbose=False)
             if show:
                plt.plot(star[irow])
@@ -639,6 +645,23 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
                     im_err_squared = star_divide_flat_err_squared, n_chunks=8, 
                     ap_width=ap_star.ap_width, profile_oversample=10, profile_smoothness=1e-2,
                     num_sigma_clipping=5., gain=gain, ron=ron)
+            #######---------------------------------------------------------
+            c_star = SkyCoord(header['ra'], header['dec'], unit=(units.hourangle, units.deg))
+            filename_arc = self.find_arc_for_star(c_star.ra, c_star.dec, jd, radius=5)
+            if filename_arc is not None:
+               print(f"  |-processing arc {os.path.basename(filename_arc)} for sience {os.path.basename(fp)}")
+               fp_arc = os.path.join(self._wd, filename_arc)
+               _dir = os.path.dirname(fp)
+               dirdump = os.path.join(_dir, 'dump')
+               if not os.path.exists(dirdump): os.makedirs(dirdump)
+               fp_out_arc = f"{dirdump}/lamp-{filename_arc}_for_{os.path.basename(fp)}.dump"
+               arcdic = self._proc_lamp(fp_arc, ap_star, num_sigclip=3, verbose=False,
+                                     suffix=f'_science_{os.path.basename(fp)}',
+                                      wavecalibrate=True, deg=4, show=True)
+               if arcdic is not None:
+                   print("  |- writing to {}".format(fp_out_arc))
+                   joblib.dump(arcdic, fp_out_arc)
+            
             print("writing to {}".format(fp_out))
             star1d["blaze"] = self.blaze
             star1d["UTC-OBS"] = isot
@@ -646,30 +669,34 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             star1d["EXPTIME"] = header["EXPTIME"]
             star1d["header"] = header
             star1d['STRIM'] = ('[{}:{}, {}:{}]'.format(*self.strimx, *self.strimy), 'PYEXSPEC data reduce')
+            star1d['filename_arc'] = filename_arc
+            star1d['wave_init'] = arcdic['wave_init']
+            star1d['wave_solu'] = arcdic['wave_solu']
+            star1d['rms_wave_calibrate'] =arcdic['rms']
             #star1d["header"] = header
             #self.star1d_divide_flat = star1d_divide_flat
             #self.star1d = star1d
             for _key in star1d_divide_flat.keys():
-                key_ = f'{_key}_divid_flat'
+                key_ = f'{_key}_divide_flat'
                 star1d[key_] = star1d_divide_flat[_key]
             joblib.dump(star1d, fp_out)
 
-        print("[5.1] load LAMP template & LAMP line list")
-        """ loop over LAMP """
-        fps_lamp = self._gather_files("arc")
-        n_lamp = len(fps_lamp)
-        for i_lamp, fp in enumerate(fps_lamp):
-            print("  |- ({}/{}) processing LAMP {} ... ".format(i_lamp, n_lamp, fp))
-            _dir = os.path.dirname(fp)
-            dirdump = os.path.join(_dir, 'dump')
-            if not os.path.exists(dirdump): os.makedirs(dirdump)
-            fp_out = "{}/lamp-{}.dump".format(dirdump, os.path.basename(fp))
-            res = self._proc_lamp(fp, ap_star, num_sigclip=3, verbose=False, wavecalibrate=True, deg=4, show=True)
-            if res is not None:
-                print("  |- writing to {}".format(fp_out))
-                joblib.dump(res, fp_out)
+        #print("[5.1] load LAMP template & LAMP line list")
+        #""" loop over LAMP """
+        #fps_lamp = self._gather_files("arc")
+        #n_lamp = len(fps_lamp)
+        #for i_lamp, fp in enumerate(fps_lamp):
+        #    print("  |- ({}/{}) processing LAMP {} ... ".format(i_lamp, n_lamp, fp))
+        #    _dir = os.path.dirname(fp)
+        #    dirdump = os.path.join(_dir, 'dump')
+        #    if not os.path.exists(dirdump): os.makedirs(dirdump)
+        #    fp_out = "{}/lamp-{}.dump".format(dirdump, os.path.basename(fp))
+        #    res = self._proc_lamp(fp, ap_star, num_sigclip=3, verbose=False, wavecalibrate=True, deg=4, show=True)
+        #    if res is not None:
+        #        print("  |- writing to {}".format(fp_out))
+        #        joblib.dump(res, fp_out)
 
-        if wavecalibrate:
+        if False:
             print("""[6.0] make stats for the ARCS solutions """)
             fps_lamp_res = glob.glob(os.path.join(self._wd, 'dump', "lamp-*"))
             fps_lamp_res.sort()
@@ -888,7 +915,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
                 #  }
                 #joblib.dump(dic, 'dic.z')
                 _xshift = wave_calibrate.get_xshift(xcoord, _flux, x_template=x_template, flux_template = flux_template,show=show)
-                print(f'_xshift_', _xshift)
+                print(f'  |-xshift = {_xshift}  pixel')
                 _wave_init = wave_calibrate.estimate_wave_init(xcoord, xshift=_xshift, x_template=x_template, wave_template = wave_template, 
                                                             deg=deg, nsigma=num_sigclip, min_select=min_select_lines, verbose=False)
                 _tab = wave_calibrate.find_lines(wave_init=_wave_init, flux=_flux, npix_chunk=8, ccf_kernel_width=2)
@@ -960,9 +987,37 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         return calibration_dict
 
 
-    def find_arc_for_star(ra_star, dec_star, ):
-        return
-        
+    def find_arc_for_star(self, ra_star, dec_star, jd_star, radius=5):
+        '''
+        find the arc file name from the datatable
+        parameters:
+        ra_star: in unit of  degree, e.g. 10*units.deg
+        dec_star: in unit of  degree, e.g. 20*units.deg
+        jd_star: the jd of shut open
+        radius [float] in unit of arcsec
+        returns:
+        ------------------
+        filename [str]
+        '''
+        from astropy.coordinates import angular_separation
+        from astropy.time import Time
+        tab_arc = self.datatable_arc.copy()
+        c = SkyCoord(tab_arc['ra'], tab_arc['dec'], unit=(units.hourangle, units.deg))
+        angdis = angular_separation(ra_star, dec_star, c.ra, c.dec)
+        angdis = angdis.to('deg').value
+        _ind = angdis <= (radius/3600)
+        if np.any(_ind):
+           tab_arc = tab_arc[_ind]
+        jds = Time(tab_arc['UTSHUT'], format='isot')
+        delta_jd = np.abs(jds.jd - jd_star)
+        ind = np.argmin(delta_jd)
+        if isinstance(ind, np.int64):
+           filename = tab_arc[ind]['filename']
+        else:
+           print(f'the number of arc for the star = {np.sum(ind)}')
+           filename = None
+        return filename
+
     def cal_image_error_square(self, image, bias_err_squared, gain, readnoise):
         '''
         calculate error**2 of each pixel of image
@@ -1041,5 +1096,6 @@ if __name__ == "__main__":
     mainprocess.show()
     try:
         sys.exit(app.exec_())# pyqt5
+        #sys.exit(app.exec())# pyqt5
     except:
         sys.exit(app.exec())# pyqt6
