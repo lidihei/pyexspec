@@ -96,12 +96,13 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/P200_rawdata/"
+        #test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/P200_rawdata/"
+        test_dir = "/share/data/lijiao/Documents/sdOB/example/lan11/data/spec/P200_DBPS/20220219_rawdata/blue"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
         self._lamp = joblib.load("../template/fear_template_blue.z")
         apfname = f'{self._wd}/ap.dump'
-        print(apfname)
+        #print(apfname)
         self.ap = joblib.load(apfname)
         self.ap_trace = self.ap.ap_center_interp
 
@@ -469,8 +470,84 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         self.ap.ap_width = ap_width
         self._draw_aperture()
         import joblib
-        joblib.dump(self.ap, os.path.join(self._wd+"ap.dump"))
-        print("Aperture saved to ", os.path.join(self._wd+"ap.dump"))
+        joblib.dump(self.ap, os.path.join(self._wd, "ap.dump"))
+        print("Aperture saved to ", os.path.join(self._wd, "ap.dump"))
+
+    def estimte_ap_width(self, flux, A, mu, sigma, k, c, Nsigma=5, show=False):
+        '''
+        Fiting apeture with a Gaussian linear function
+        F(X) = A /(sqrt(2*np.pi)*sigma)exp((x-mu)**2/sigma**2)+kx+c
+        ap_width = Nsimga * simga
+        returns:
+        ----------------
+        ap_width
+        '''
+        from fit_function import gaussian_linear_func
+        from scipy.optimize import curve_fit
+        x = np.arange(len(flux))
+        p0 = [A, mu, sigma, k, c]
+        popt, pcov = curve_fit(gaussian_linear_func, x, flux, p0=p0)
+        sigma = np.abs(popt[2])
+        ap_width = Nsigma*sigma
+        if show:
+           xdens = np.arange(0, len(flux), 0.01)
+           yfit = gaussian_linear_func(xdens, *popt)
+           fig, ax = plt.subplots(1,1)
+           plt.plot(x, flux)
+           plt.plot(xdens, yfit, label='Gaussian fit')
+           plt.legend()
+           plt.xlabel('x coords (pixel)')
+           plt.ylabel('counts')
+           plt.axvline(x=popt[1] - ap_width, ls='--')
+           plt.axvline(x=popt[1] + ap_width, ls='--')
+        return ap_width
+
+
+    def _adjust_aperture_star(self, image_star, ap_width = 12, Nsigma=5, strim_l=50, strim_r=300):
+        '''
+        adjust aperture for a specific image
+        '''
+        #try:
+        from aperture import Aperturenew as Aperture
+        ap_init = self.ap
+        for i, ap_center in enumerate(ap_init.ap_center):
+            starting_row = int(len(ap_center)/2)
+            starting_col = int(ap_center[starting_row])
+            _trace = self.trace_local_max(
+                gaussian_filter(image_star, sigma=5),
+                starting_row, starting_col, maxdev=10, fov=10, ntol=10)
+            self._trace = _trace
+            if np.sum(_trace>0)>100:
+                self.ap_trace[i] = _trace
+        self.ap_trace = self.ap_trace[sort_apertures(self.ap_trace)]
+        self.ap = Aperture(ap_center=self.ap_trace, ap_width=12)
+        self.ap.get_image_info(image_star)
+        self.ap.polyfitnew(deg = 2, ystart=starting_row)
+        self.ap_trace = self.ap.ap_center_interp
+        if ap_width is None:
+           print(f'estimate ap_width using Gaussian function, ap_width = {Nsigma}sigma')
+           ap_widths = []
+           for i, ap_center in enumerate(ap_init.ap_center):
+               N = 5
+               _row = int(len(ap_center)/2)
+               rows = np.arange(_row-N, _row+N)
+               for j in rows:
+                   mu = ap_center[j]
+                   self._mu = mu
+                   #print(f'mu = {mu}')
+                   flux = image_star[j]
+                   self._flux = flux
+                   A = flux[int(mu)] - flux[int(mu)-10]
+                   flux = flux[strim_l:strim_r]
+                   _ap_width = self.estimte_ap_width(flux, A, mu-strim_l, 5, 0, 0, Nsigma=Nsigma, show=False)
+                   ap_widths.append(_ap_width)
+        ap_width = int(np.ceil(np.median(ap_widths)))
+        print(f'ap_width = {ap_width}')
+        self.ap = Aperture(ap_center=self.ap_trace, ap_width=ap_width)
+        self.ap.get_image_info(image_star)
+        self.ap.polyfitnew(deg=2, ystart=starting_row)
+        joblib.dump(self.ap, os.path.join(self._wd, "ap.dump"))
+        print("Adjust_star aperture")
 
     def _update_nap(self):
         self.lineEdit_nap.setText("N(ap)={}".format(self.ap_trace.shape[0]))
@@ -519,7 +596,6 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         #flat_bg = gaussian(flat_bg, sigma=(20, 20))
         #flat_bg= self.ap.backgroundnew(self.master_flat, q=(40, 40), npix_inter=7, sigma=(20, 20), kernel_size=(21, 21))
         self.flat_bg = flat_bg
-        self.blaze, self.sensitivity = self.ap.make_normflat(self.master_flat)
         master_flat = self.master_flat.copy()
         max_master_flat = np.nanmax(master_flat)
         master_flat /=  max_master_flat
@@ -538,6 +614,8 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
             if not os.path.exists(dirdump): os.makedirs(dirdump)
             fp_out = "{}/star-{}.dump".format(dirdump, os.path.basename(fp))
             star = self.read_star(fp).copy()
+            self._adjust_aperture_star(star, ap_width = None, Nsigma=5)
+            self.blaze, self.sensitivity = self.ap.make_normflat(self.master_flat)
             star_err_squared = self.image_err_squared
             star_divide_flat = star/master_flat
             star_divide_flat_err_squared = star_err_squared/master_flat**2 + star**2*master_flat_err_squared/master_flat**4
@@ -613,7 +691,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
 
             fig.tight_layout()
             fig.savefig("{}/lamp_stats.pdf".format(self._wd))
-        pass
+        return
 
 
     def _extract_sum(self, im, ap_center_interp,im_err_sqaured=None, ap_width=15, gain=1., ron=0):
@@ -812,7 +890,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
                 _xshift = wave_calibrate.get_xshift(xcoord, _flux, x_template=x_template, flux_template = flux_template,show=show)
                 print(f'_xshift_', _xshift)
                 _wave_init = wave_calibrate.estimate_wave_init(xcoord, xshift=_xshift, x_template=x_template, wave_template = wave_template, 
-                                                            deg=deg, nsigma=num_sigclip, min_select=min_select_lines)
+                                                            deg=deg, nsigma=num_sigclip, min_select=min_select_lines, verbose=False)
                 _tab = wave_calibrate.find_lines(wave_init=_wave_init, flux=_flux, npix_chunk=8, ccf_kernel_width=2)
                 _wave_solu = wave_calibrate.calibrate(xcoord, _tab, flux=_flux, deg=deg, num_sigclip=num_sigclip,
                                               line_peakflux=line_peakflux, line_type=line_type ,min_select_lines=min_select_lines, show=show)
@@ -881,6 +959,10 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         )
         return calibration_dict
 
+
+    def find_arc_for_star(ra_star, dec_star, ):
+        return
+        
     def cal_image_error_square(self, image, bias_err_squared, gain, readnoise):
         '''
         calculate error**2 of each pixel of image
