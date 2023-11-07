@@ -51,7 +51,7 @@ def polyfit_backgroud(x, z, deg=4, min_select=10, nsigma=5, verbose=True, **argw
             indselect &= np.abs(z_res) < nsigma * sigma
             iiter += 1
         if verbose:
-            print("@polyfit_backgroud: iter-{} \t{} points kicked, {} points left, rms={:.5f} counts".format(
+            print("  |-@polyfit_backgroud: iter-{} \t{} points kicked, {} points left, rms={:.5f} counts".format(
                 iiter, n_reject, np.sum(indselect), sigma))
     #pf1.rms = sigma
     return pf1, indselect
