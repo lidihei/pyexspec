@@ -1,5 +1,11 @@
 # `pyexspec`
-An automated pipeline for reducing 2D spectra of instruments, e.g. the 2.16m BFOSC, 
+An automated pipeline for reducing 2D spectra of instruments and is a modified version of [bfosc](https://github.com/hypergravity/bfosc/)
+
+Authors:
+- Jiao Li
+- Zhang Bo
+
+ 
 
 ## Installation
 

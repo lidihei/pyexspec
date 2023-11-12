@@ -416,6 +416,7 @@ class Fcalibrate():
         ----------------
         Flam [array] in unit of erg/s/cm2/A
         Flam _err [array] error of Flam
+        gpm_star [array bool] good pixel mask
         '''
         if counts_mask is None: counts_mask = np.ones_like(counts, dtype=bool)
         Nlam_star, Nlam_ivar_star, gpm_star = \
@@ -425,6 +426,6 @@ class Fcalibrate():
                          tellmodel=tellmodel, extinct_correct=extinct_correct, airmass=airmass, longitude=longitude,  latitude=latitude, 
                          extinctfilepar=extinctfilepar, extrap_sens=extrap_sens, use_PolyFitter=use_PolyFitter)
         Flam = Nlam_star * sensfunc_factor
-        Flam_ivar = Nlam_ivar_star*sensfunc_factor**2
-        Flam_err = np.sqrt(Flam_ivar)
+        Flam_ivar = Nlam_ivar_star/sensfunc_factor**2
+        Flam_err = np.sqrt(1/Flam_ivar)
         return Flam, Flam_err, gpm_star
