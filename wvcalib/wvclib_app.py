@@ -502,7 +502,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self._update_order()
 
     def _invert_xaxis(self):
-        self.axs[0].invert_xaxis()
+        self.ax.invert_xaxis()
         self.canvas.draw()
 
 
