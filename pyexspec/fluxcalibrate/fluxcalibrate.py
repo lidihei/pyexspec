@@ -1,5 +1,5 @@
 import numpy as np
-from pyexspec.utils import sigma_clip
+from pyexspec.utils import sigma_clip, rvcorr_spec
 from pypeit.core import flux_calib
 from scipy import interpolate
 from astropy import constants, units
@@ -25,6 +25,10 @@ class Fcalibrate():
         if fluxobs_std_err is not None: self.fluxobs_std_ivar = 1/fluxobs_std_err**2
         self.wavesyn = wavesyn
         self.fluxsyn = fluxsyn
+
+    def rvcorr_syn(self, rv, wave=None):
+        if wave is None: wave = self.wavesyn
+        self.wavesyn_rvcorr = rvcorr_spec(wave, rv, returnwvl=True)
 
     def calibrate_flux_Poly1DFitter(self, waveobs=None, fluxobs=None, wavesyn=None, fluxsyn=None, fluxobs_err=None,
                                     num_sigclip =5,  deg=5, min_select=400, verbose=True, lograte=True):

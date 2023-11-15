@@ -3,7 +3,7 @@ from astropy.io import fits
 
 class iospec2d():
 
-    def __init__(self, rot90 = False, trimx = None, trimy = None):
+    def __init__(self, rot90 = False, trimx = None, trimy = None, ihdu=0):
         '''
         Read 2D image of a spectrum, and trim the image
         parameters:
@@ -16,8 +16,17 @@ class iospec2d():
         self.trimx = trimx
         self.trimy = trimy
         self.rot90 = rot90
+        self.ihdu = ihdu
 
     def _read_img(self, fp_star):
+        '''
+        parameters:
+        ------------
+        fp_star [str] file name including full path
+        returns:
+        ------------
+        data [2D array] data array of trimed image
+        '''
         hdu = fits.open(fp_star)
         ihdu = self.ihdu
         data = hdu[ihdu].data
@@ -43,6 +52,7 @@ class iospec2d():
         gain [float]  in unit of e-/ADU
         readnoise [float]
         returns:
+        ------------
         image_err_squared
         '''
         image_err_squared = image*gain
@@ -53,9 +63,14 @@ class iospec2d():
 
     def read_star(self, fp_star, master_bias=None, master_bias_err_squared=None, gain=None, readnoise=None, remove_cosmic_ray=False):
         '''
+        paramters:
+        --------------
         fp_star [str] file name including full path
         gain [float] in units of e-/ADU
         readnoise [float] system noise in units of e-
+        returns:
+        --------------
+        image [2D array] the trimed image which have substracted bias
         '''
         master_bias = self.master_bias if master_bias is None else master_bias
         hdu = fits.open(fp_star)

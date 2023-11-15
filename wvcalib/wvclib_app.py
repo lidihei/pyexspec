@@ -118,8 +118,9 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.pushButton_del_line.clicked.connect(self._del_line)
         self.pushButton_save_line.clicked.connect(self._save_lines)
         self.pushButton_fit.clicked.connect(self._fit)
-        self.lineEdit_xdeg.setText(f"deg(x) = ")
-        self.lineEdit_ydeg.setText(f"deg(y) = ")
+        #self.lineEdit_xdeg.setPlaceholderText('X deg (int)')
+        #self.lineEdit_xdeg.setText(f"deg(x) = ")
+        #self.lineEdit_ydeg.setText(f"deg(y) = ")
         # self.listWidget_files.currentItemChanged.connect(self._scatter_point)
 
     def _select_linelist(self):
@@ -584,26 +585,33 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         #self.label_xdeg = QLabel()
         #self.lineEdit_xdeg.textChanged.connect(self.label_xdeg.setText)
         from pyexspec.fitfunc import Polyfitdic, Poly1DFitter,Poly2DFitter
-        print(self.lineEdit_xdeg.text())
-        print(self.lineEdit_ydeg.text())
-        Fittername = 'Poly1DFitter'
-        xdeg = int(self.lineEdit_xdeg.text())
-        ydeg = int(self.lineEdit_ydeg.text())
+        print(f'xdeg = {self.lineEdit_xdeg.text()}')
+        print(f'ydeg = {self.lineEdit_ydeg.text()}')
+        Fittername = self.comboBox_fitfunc.currentText()
+        try:
+            xdeg = int(self.lineEdit_xdeg.text())
+        except:
+            xdeg = 1
+        try:
+            ydeg = int(self.lineEdit_ydeg.text())
+        except:
+            ydeg = 1
         tab = self.tab_lin_all
         x, y, z, indselect = tab['xcoord'], tab['order']-1, tab['line'], tab['maskgood']
         indselect = np.array(indselect, dtype=bool)
         if Fittername == 'Poly1DFitter':
             deg = xdeg
-            Fitter = Poly1DFitter
+            Fitter = Polyfitdic[Fittername]
             Polyfunc = Fitter(x[indselect], z[indselect], deg=xdeg, pw=2, robust=False)
             wv_fit = Polyfunc.predict(x)
             wave_solu = Polyfunc.predict(self.xindex)
         elif Fittername == 'Poly2DFitter':
-            Fitter = Poly2DFitter
+            Fitter = Polyfitdic[Fittername]
             deg = (xdeg, ydeg)
-            Polyfunc = Fitter(x[indselect], y[indselect], z[indselect], deg=xdeg, pw=1, robust=False)
+            Polyfunc = Fitter(x[indselect], y[indselect], z[indselect], deg=deg, pw=1, robust=False)
             wv_fit = Polyfunc.predict(x, y)
             wave_solu = Polyfunc.predict(self.Xgrid, self.Ygrid)
+        self.Polyfunc = Polyfunc
         self.wave_solu = wave_solu
         tab['wv_fit'] = wv_fit
         self.tab_lin_all = tab

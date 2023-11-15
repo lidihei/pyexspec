@@ -114,7 +114,6 @@ class Aperturenew(Aperture):
 
     def backgroundnew(self, img, ap_center=None, q=(5, 40), npix_inter=10, sigma=None, kernel_size=None, ap_width=None, Napw=1.5,
                       longslit = True, Napw_bg=1, deg=4, num_sigclip=5, **argwords ):
-        """ newly developed on 2017-05-28, with best performance """
         """ determine background/scattered light using inter-aperture pixels
         Parameters
         ----------
@@ -132,9 +131,10 @@ class Aperturenew(Aperture):
             median smoothing parameter
         ap_width: int
             the width of aperture
-        Napw: int
+        Napw: float
            N times ap_width away from the aperture center which is the right (and left) edge of the background
-        Napw_bg: N times ap_width area used to fitting background, |Napw_bg*ap_width-|Napw*ap_width -|center|+ Napw*ap_width| + Napw_bg*ap_width|
+        Napw_bg: float
+           N times ap_width area used to fitting background, |Napw_bg*ap_width-|Napw*ap_width -|center|+ Napw*ap_width| + Napw_bg*ap_width|
         Returns
         -------
         bg0
@@ -151,7 +151,8 @@ class Aperturenew(Aperture):
 
         bg0 = img.copy()
 
-
+        self.Napw = Napw
+        self.Napw_bg = Napw_bg
         if longslit:
            if n_ap < 2:
               i_ap = 0
