@@ -77,10 +77,10 @@ class WvClibWindow(object):
         self.pushButton_next_order = QtWidgets.QPushButton(self.layoutWidget)
         self.pushButton_next_order.setObjectName("pushButton_next_order")
         self.verticalLayout.addWidget(self.pushButton_next_order)
-        ####----Button_clear_line
-        self.pushButton_clear_line = QtWidgets.QPushButton(self.layoutWidget)
-        self.pushButton_clear_line.setObjectName("pushButton_clear_line")
-        self.verticalLayout.addWidget(self.pushButton_clear_line)
+        ####----Button_invert_xaxis
+        self.pushButton_invert_xaxis = QtWidgets.QPushButton(self.layoutWidget)
+        self.pushButton_invert_xaxis.setObjectName("pushButton_invert_xaxis")
+        self.verticalLayout.addWidget(self.pushButton_invert_xaxis)
         ####----Button_update_table
         self.pushButton_update_table = QtWidgets.QPushButton(self.layoutWidget)
         self.pushButton_update_table.setObjectName("pushButton_update_table")
@@ -133,6 +133,21 @@ class WvClibWindow(object):
         self.statusbar.setObjectName("statusbar")
         MainWindow.setStatusBar(self.statusbar)
 
+        ####---- find line center by Gassian fitting 
+        self.CheckBoxWidget = QtWidgets.QWidget(self.centralwidget)
+        self.CheckBoxWidget.setGeometry(QtCore.QRect(466, 500, 100, 21))
+        self.CheckBoxWidget.setObjectName("CheckBoxWidget")
+        self.layoutCheckBox = QtWidgets.QVBoxLayout(self.CheckBoxWidget)
+        self.layoutCheckBox.setContentsMargins(0, 0, 0, 0)
+        self.checkBox_gaussianfit = QtWidgets.QCheckBox(self.CheckBoxWidget)
+        self.checkBox_gaussianfit.setObjectName("gaussianfit")
+        self.layoutCheckBox.addWidget(self.checkBox_gaussianfit)
+        self.checkBox_gaussianfit.setText("Gaussian Fit")
+        self.lineEdit_findwindow = QtWidgets.QLineEdit(self.centralwidget)
+        self.lineEdit_findwindow.setPlaceholderText('Find Window')
+        self.lineEdit_findwindow.setEnabled(True)
+        self.lineEdit_findwindow.setGeometry(QtCore.QRect(466, 521, 100, 21))
+
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
 
@@ -142,7 +157,7 @@ class WvClibWindow(object):
         self.pushButton_update_table.setText(_translate("MainWindow", "update table"))
         self.pushButton_upper_order.setText(_translate("MainWindow", "upper order"))
         self.pushButton_next_order.setText(_translate("MainWindow", "next order"))
-        self.pushButton_clear_line.setText(_translate("MainWindow", "clear lines"))
+        self.pushButton_invert_xaxis.setText(_translate("MainWindow", "invert X-axis"))
         self.pushButton_add_line.setText(_translate("MainWindow", "add line"))
         self.pushButton_del_line.setText(_translate("MainWindow", "del line"))
         self.pushButton_save_line.setText(_translate("MainWindow", "save lines"))

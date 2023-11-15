@@ -107,8 +107,8 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/P200_rawdata/"
-        #test_dir = "/share/data/lijiao/Documents/sdOB/example/lan11/data/spec/P200_DBPS/20220219_rawdata/blue"
+        #test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/P200_rawdata/"
+        test_dir = "/share/data/lijiao/Documents/sdOB/example/lan11/data/spec/P200_DBPS/20220219_rawdata/blue"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
         self._lamp = joblib.load("../template/fear_template_blue.z")
@@ -702,10 +702,10 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         from pyexspec.utils import rvcorr_spec
         kind = 'barycentric'
         ltt = time_shut.light_travel_time(c_star,kind)
-        borhjd = time_shut.jd + ltt.jd
+        borhjd = time_shut.tdb + ltt.tdb
         time_exp = TimeDelta(header['exptime'], format='sec')
         vcorr = c_star.radial_velocity_correction(obstime=time_shut+time_exp, kind=kind).to('km/s').value #baryrv =rv+barycorr(1+rv/c) (km/s) 
-        star1d['bjd_shut'] = borhjd
+        star1d['bjd_shut'] = borhjd.jd
         star1d['barycorr'] = vcorr
         header['barycorr'] = (vcorr, 'rv + vcorr + rv * vcorr / c')
         star1d['wave_init_barycorr'] = rvcorr_spec(arcdic['wave_init'], vcorr, returnwvl=True)
