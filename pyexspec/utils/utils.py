@@ -76,3 +76,4 @@ def estimate_gain(flat1,flat2, bias1, bias2, section = None):
     gain = ((np.mean(flat1) + np.mean(flat2)) - (np.mean(bias1) + np.mean(bias2)))/(np.var(flatdif) - np.var(biasdif) )
     readnoise = gain * np.var(biasdif) / sqrt(2)
     return gain, readnoise
+

@@ -2,7 +2,7 @@ from twodspec.aperture import *
 
 from skimage.filters import gaussian
 from scipy.signal import medfilt2d
-from twodspec.polynomial import Poly1DFitter 
+from .fitfunc import Poly1DFitter
 import numpy as np
 
 def polyfit_backgroud(x, z, deg=4, min_select=10, nsigma=5, verbose=True, **argwords):
@@ -61,6 +61,20 @@ def straight_line(x, y):
     a = np.float(np.diff(y) / np.diff(x))
     b = np.float(y[0] - a * x[0])
     return a, b
+
+
+
+def sort_apertures(ap_trace: np.ndarray):
+    """ sort ascend """
+    nap = ap_trace.shape[0]
+    ind_sort = np.arange(nap, dtype=int)
+    for i in range(nap - 1):
+        for j in range(i + 1, nap):
+            ind_common = (ap_trace[i] >= 0) & (ap_trace[j] >= 0)
+            if np.median(ap_trace[i][ind_common]) > np.median(ap_trace[j][ind_common]) and ind_sort[i] < ind_sort[j]:
+                ind_sort[i], ind_sort[j] = ind_sort[j], ind_sort[i]
+                # print(ind_sort)
+    return ind_sort
 
 class Aperturenew(Aperture):
 

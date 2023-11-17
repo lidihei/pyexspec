@@ -25,7 +25,7 @@ from photutils.segmentation import detect_sources
 import warnings
 warnings.filterwarnings('ignore')
 
-matplotlib.use('Qt5Agg')
+#matplotlib.use('Qt5Agg')
 matplotlib.rcParams["font.size"] = 5
 
 
@@ -40,7 +40,6 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         #print('The index of hdulist: ihdu = (must be integer e.g. 1)')
         QtWidgets.QMainWindow.__init__(self, parent)
         self.tablename_lines = None # the found emission lines table
-        self.pos = []
         self.pos_line = [0, 0]
         # UI
         self.setupUi(self)
@@ -134,6 +133,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
 
     def _select_arc(self):
         fileName,_ = QtWidgets.QFileDialog.getOpenFileName(self, "Open arc", "dump files (*.dump)")
+        self._wd = os.path.direname(fileName)
         self.lineEdit_arc.setText(fileName)
         self._arcfile = fileName
         self._read_arc(fileName)
@@ -619,6 +619,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         #self.fitWindow._draw_wvfit()
         #self.fitWindow._draw_residual()
         self._save_fit_resault()
+        self._wave_template()
         pass
 
     def _save_fit_resault(self):
@@ -636,6 +637,13 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         fname = os.path.join(self._wd, f'{name}.z')
         print(f'rms = {rms}')
         joblib.dump(self.savedata, fname)
+
+    def _save_template(self):
+        templatedic = {"wave": self.wavesolus,
+                       "flux": self.fluxes
+                      }
+        fname = os.path.join(self._wd, f'arc_template_spec.z')
+        joblib.dump(templatedic, fname)
 
 
 

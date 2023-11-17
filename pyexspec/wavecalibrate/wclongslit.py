@@ -1,10 +1,9 @@
-from twodspec.polynomial import Poly1DFitter
-from scipy.fftpack import fft
-from scipy.fftpack import ifft
+from pyexspec.fitfunc import Poly1DFitter
 import numpy as np
 import matplotlib.pyplot as plt
+from .findlines import findline
 
-class longslit():
+class longslit(findline):
 
     def __init__(self, wave_template:np.array=None,
                  flux_template: np.array=None, linelist: np.array=None):
@@ -34,13 +33,13 @@ class longslit():
         -------------
         tab_lines: [astropy.table] a table of emission lines of the sample spectrum
         '''
-        from twodspec import thar
+        from .findlines import find_lines
         wave_init = self.wave_init if (wave_init is None) else wave_init
         flux = self.flux_pypiet if flux is None else flux
         if len(wave_init.shape) ==1:
             wave_init = np.array([wave_init])
             flux = np.array([flux])
-        tab_lines = thar.find_lines(wave_init, flux, self.linelist, npix_chunk=npix_chunk, ccf_kernel_width=ccf_kernel_width)
+        tab_lines = find_lines(wave_init, flux, self.linelist, npix_chunk=npix_chunk, ccf_kernel_width=ccf_kernel_width)
         return tab_lines
 
     def estimate_wave_init(self, x: np.array = None, xshift: float=None,
@@ -228,51 +227,3 @@ class longslit():
         self.xshift = xshift
         return xshift
 
-    def calCCF(self, xcoord, flux, x_template: np.array = None,
-               flux_template:np.array = None, step: float = 0.1, show: bool = False):
-        '''
-        calculate CCF of sample spectrum and template arc lamp spectrum
-        parameters:
-        -----------------
-        xcoord [1D int array] the index coordiates of sample spectrum, generally started with 0 in unit of pixel
-        flux [1D array]: flux of sample spectrum
-        x_template [1D int array] the index coordiates of the template arc lamp spectrum, generally started with 0 in unit of pixel
-        flux_template [1D array] the flux of the template arc lamp spectrum
-        step [float]: a step to interpolate the index in unit of pixel
-        returns:
-        shifts [1D array] shift of the index of CCF in unit of pixel
-        CCF [1D array]
-        '''
-        x_template = self.x_template if x_template is None else x_template
-        flux_template = self.flux_template if flux_template is None else flux_template
-        xmax = np.min([xcoord[-1], x_template[-1]])
-        x = np.arange(xcoord[0], xmax+step, step)
-        shifts = x-xmax/2
-        fluxr = np.interp(x, xcoord, flux)
-        ftmp = np.interp(x, x_template, flux_template)
-        tflux = fft(fluxr)
-        tftmp = fft(ftmp)
-        conj_tflux = np.conj(tflux)
-        num = int(len(tftmp)/2)+1
-        tmp = abs(ifft(conj_tflux*tftmp))
-        ccf = np.hstack((tmp[num:], tmp[:num]))
-        self.ccf = ccf
-        self.shifts = shifts
-        if show:
-           fig, axs = plt.subplots(2, 1, figsize=(7, 6))
-           plt.sca(axs[0])
-           plt.title(f'meidian flux template={np.median(flux_template):.2f}; sample={np.median(flux):.2f} counts')
-           plt.plot(xcoord, flux/np.median(flux), label='sample', lw=1)
-           plt.plot(x_template, flux_template/np.median(flux_template), label='template', lw=1)
-           plt.title(f'meidian flux template={np.median(flux_template):.2f}; sample={np.median(flux):.2f} counts')
-           plt.xlabel('x index (pixel)')
-           plt.ylabel('Flux/median(Flux)')
-           plt.legend()
-           plt.sca(axs[1])
-           xshift = shifts[np.argmax(ccf)]
-           plt.title(f'shift ={xshift}')
-           plt.plot(shifts, ccf, lw=1)
-           plt.xlabel('x shifts (pixel)')
-           plt.ylabel('CCF')
-           self.fig_QA_ccf = fig
-        return shifts, ccf

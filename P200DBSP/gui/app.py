@@ -26,6 +26,7 @@ from convenience_functions import show_image, display_cosmic_rays
 from astropy.coordinates import SkyCoord, EarthLocation
 from astropy import units
 from pyexspec.io import iospec2d
+from pyexspec.aperture import sort_apertures
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -37,7 +38,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
 
     def __init__(self, parent=None, instrument=None,
                  rot90=False, trimx = [75, 392], trimy = [0, 2834],
-                 nwv=None,  wavecalibrate=True, site=None, Napw=1.5, Napw_bg=1):
+                 nwv=None,  wavecalibrate=True, site=None, Napw=2, Napw_bg=2):
         '''
         rot90 [bool] if True rotate the image with 90 degree
         trimx: list, or tuple]: Trim image on x axis, e.g. trimx = [0, 100]
@@ -159,7 +160,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         print(fileName)
         self.lineEdit_lamp.setText(fileName)
         self._lamp = joblib.load(fileName)
-        print("Lamp loaded!")
+        print("The Template Spectrum of Arc Lamp is loaded!")
 
     def _set_wd(self):
         self._wd = self.lineEdit_wd.text()
@@ -224,7 +225,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
             return
         # change to Table Widget
         self.tableWidget_files.clear()
-        self.tableWidget_files.verticalHeader().setVisible(False)
+        self.tableWidget_files.verticalHeader().setVisible(True)
         self.tableWidget_files.setRowCount(self.nfp)
         n_col = 7
         self.tableWidget_files.setColumnCount(n_col)
@@ -253,7 +254,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
     def _show_img(self):
         ind_elected = self.tableWidget_files.currentRow()
         fp_selected = self.fps_full[ind_elected]
-        print("Show file {}: {}".format(ind_elected, fp_selected))
+        print("  |-Show file {}: {}".format(ind_elected+1, fp_selected))
         # try to draw it
         try:
             #img = fits.getdata(fp_selected)
@@ -586,7 +587,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         self.ap.polyfitnew(deg = 2, ystart=400)
         self.ap_trace = self.ap.ap_center_interp
         if ap_width is None:
-            print(f'estimate ap_width using Gaussian function, ap_width = {Nsigma}sigma')
+            print(f'  |-estimate ap_width using Gaussian function, ap_width = {Nsigma}sigma')
             ap_widths = []
             for i, ap_center in enumerate(ap_init.ap_center):
                 N = 5
@@ -811,21 +812,6 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
             self._extract_single_star(fp, master_flat=master_flat,
                                 master_flat_err_squared=master_flat_err_squared, site=self.site)
 
-        #print("[5.1] load LAMP template & LAMP line list")
-        #""" loop over LAMP """
-        #fps_lamp = self._gather_files("arc")
-        #n_lamp = len(fps_lamp)
-        #for i_lamp, fp in enumerate(fps_lamp):
-        #    print("  |- ({}/{}) processing LAMP {} ... ".format(i_lamp, n_lamp, fp))
-        #    _dir = os.path.dirname(fp)
-        #    dirdump = os.path.join(_dir, 'dump')
-        #    if not os.path.exists(dirdump): os.makedirs(dirdump)
-        #    fp_out = "{}/lamp-{}.dump".format(dirdump, os.path.basename(fp))
-        #    res = self._proc_lamp(fp, ap_star, num_sigclip=3, verbose=False, wavecalibrate=True, deg=4, show=True)
-        #    if res is not None:
-        #        print("  |- writing to {}".format(fp_out))
-        #        joblib.dump(res, fp_out)
-
         return
 
 
@@ -1028,7 +1014,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
                 #joblib.dump(dic, 'dic.z')
                 _xshift = wave_calibrate.get_xshift(xcoord, _flux, x_template=x_template, flux_template = flux_template,show=show)
                 print(f'  |-xshift = {_xshift}  pixel')
-                _wave_init = wave_calibrate.estimate_wave_init(xcoord, xshift=_xshift, x_template=x_template, wave_template = wave_template, 
+                _wave_init = wave_calibrate.estimate_wave_init(xcoord, xshift=_xshift, x_template=x_template, wave_template = wave_template,
                                                             deg=deg, nsigma=num_sigclip, min_select=min_select_lines, verbose=False)
                 _tab = wave_calibrate.find_lines(wave_init=_wave_init, flux=_flux, npix_chunk=8, ccf_kernel_width=2)
                 _wave_solu = wave_calibrate.calibrate(xcoord, _tab, flux=_flux, deg=deg, num_sigclip=num_sigclip,
@@ -1073,11 +1059,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         isot =  f'{header["UTSHUT"]}'
         jd = Time(isot, format='isot').jd
         if wavecalibrate is False:
-           print("!!! The wavelenth of this LAMP is not calibrated")
-        # reasonable
-        # mpflux
-        # rms
-        # predict wavelength solution
+           print("!!! The wavelenth of this ARC LAMP is not calibrated")
         nx, norder = lamp1d.shape
         mx, morder = np.meshgrid(np.arange(norder), np.arange(nx))
         # result
@@ -1142,19 +1124,6 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
     def writefits(self, header, data, fout):
         hdu = fits.HDUList([fits.PrimaryHDU(header=_header, data=_data)])
         hdu.writeto(fout)
-
-
-def sort_apertures(ap_trace: np.ndarray):
-    """ sort ascend """
-    nap = ap_trace.shape[0]
-    ind_sort = np.arange(nap, dtype=int)
-    for i in range(nap - 1):
-        for j in range(i + 1, nap):
-            ind_common = (ap_trace[i] >= 0) & (ap_trace[j] >= 0)
-            if np.median(ap_trace[i][ind_common]) > np.median(ap_trace[j][ind_common]) and ind_sort[i] < ind_sort[j]:
-                ind_sort[i], ind_sort[j] = ind_sort[j], ind_sort[i]
-                # print(ind_sort)
-    return ind_sort
 
 
 if __name__ == "__main__":
