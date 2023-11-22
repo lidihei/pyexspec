@@ -124,7 +124,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/P200_rawdata/"
+        test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/20200113_P200/"
         #test_dir = "/share/data/lijiao/Documents/sdOB/example/lan11/data/spec/P200_DBPS/20220219_rawdata/blue"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
@@ -176,9 +176,16 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         imgtype = np.asarray([fits.getheader(fp)["OBJECT"] for fp in fps_full])
         imgtype1 = np.asarray([fits.getheader(fp)["IMGTYPE"] for fp in fps_full])
         exptime = np.asarray([fits.getheader(fp)["EXPTIME"] for fp in fps_full])
-        ra = np.asarray([fits.getheader(fp)["RA"] for fp in fps_full])
-        dec = np.asarray([fits.getheader(fp)["DEC"] for fp in fps_full])
         UTSHUT = np.asarray([fits.getheader(fp)["UTSHUT"] for fp in fps_full])
+        ra = [] #np.zeros(len(fps_full))
+        dec = [] #np.zeros(len(fps_full))
+        for i, fp in enumerate( fps_full):
+            #print(fp)
+            header = fits.getheader(fp)
+            try: ra.append(header["RA"])
+            except: ra.append(np.nan)
+            try: dec.append(header["DEC"])
+            except: dec.append(np.nan)
         types = np.zeros_like(imgtype)
         self.type_dict = OrderedDict(drop=0, bias=1, flat=2, arc=3, star=4)
         self.type_list = list(self.type_dict.keys())
@@ -204,7 +211,6 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         self.datatable = table.Table(
             data=[fps, imgtype, exptime, types, ra, dec, UTSHUT],
             names=["filename", "imagetype", "exptime", "type", 'ra', 'dec', 'UTSHUT'])
-        self.datatable_arc = self.datatable[self.datatable['type']=='arc']
         # print(self.datatable["type"])
 
     def _update_datatable(self):
@@ -215,6 +221,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         dire_table = os.path.join(self._wd, 'TABLE')
         if not os.path.exists(dire_table): os.makedirs(dire_table)
         self.datatable.write(os.path.join(dire_table, 'filelist_table.csv'), overwrite=True)
+        self.datatable_arc = self.datatable[self.datatable['type']=='arc']
 
     def _get_file_list(self):
         self._make_datatable()
@@ -663,7 +670,8 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         if not os.path.exists(dirdump): os.makedirs(dirdump)
         fp_out = "{}/star-{}.dump".format(dirdump, os.path.basename(fp))
         star = self.read_star(fp).copy()
-        self.tableWidget_files.itemSelectionChanged.connect(self._show_img)
+        #self.tableWidget_files.itemSelectionChanged.connect(self._show_img)
+        self._show_img()
         if adjust_aperture:
            self._adjust_aperture_star(star, ap_width = None, Nsigma=3.5)
         try: self.ap.ap_width = int(self.lineEdit_ap_width.text())

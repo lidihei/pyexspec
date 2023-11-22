@@ -278,8 +278,7 @@ class Fcalibrate():
                          airmass=None, longitude=None, latitude=None, extinctfilepar=None, extrap_sens=False, use_PolyFitter=True, **keywords):
         """
         Get the final sensitivity function factor that will be multiplied into a spectrum in units of counts to flux calibrate it.
-        This code interpolates the sensitivity function and can also multiply in extinction and telluric corrections.
-     
+        This code interpolates the sensitivity function and can also multiply in extinction and telluric corrections. 
         FLAM = counts*sensfunc_factor
         FLAM_err = counts_err*sensfunc_factor
 
