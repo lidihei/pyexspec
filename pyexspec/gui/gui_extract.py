@@ -59,7 +59,7 @@ class ExtractWindow(object):
         self.lineEdit_trimx_end = QtWidgets.QLineEdit(self.centralwidget)
         self.lineEdit_trimx_end.setPlaceholderText('trimx end:300')
         self.lineEdit_trimx_end.setEnabled(True)
-        self.lineEdit_trimx_end.setGeometry(QtCore.QRect(600.5, 20, 100, 21))
+        self.lineEdit_trimx_end.setGeometry(QtCore.QRect(600, 20, 100, 21))
         ###---- trimy
         self.lineEdit_trimy_start = QtWidgets.QLineEdit(self.centralwidget)
         self.lineEdit_trimy_start.setPlaceholderText('trimy start:0')
@@ -68,7 +68,7 @@ class ExtractWindow(object):
         self.lineEdit_trimy_end = QtWidgets.QLineEdit(self.centralwidget)
         self.lineEdit_trimy_end.setPlaceholderText('trimy end:300')
         self.lineEdit_trimy_end.setEnabled(True)
-        self.lineEdit_trimy_end.setGeometry(QtCore.QRect(600.5, 45, 100, 21))
+        self.lineEdit_trimy_end.setGeometry(QtCore.QRect(600, 45, 100, 21))
         ###----datatable
         self.tableWidget_files = QtWidgets.QTableWidget(self.centralwidget)
         self.tableWidget_files.setGeometry(QtCore.QRect(10, 70, 571, 451))

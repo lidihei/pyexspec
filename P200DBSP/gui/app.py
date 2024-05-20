@@ -124,7 +124,6 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/20200113_P200/"
         #test_dir = "/share/data/lijiao/Documents/sdOB/example/lan11/data/spec/P200_DBPS/20220219_rawdata/blue"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)

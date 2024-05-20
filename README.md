@@ -12,6 +12,9 @@ Authors:
 1. install `songcn` package
     - `pip install -U git+git://github.com/hypergravity/songcn`
     - `pip show songcn` should be at least `0.0.9`
+1.1 install 'songcn' package
+    - git clone https://github.com/lidihei/songcn.git
+    - bash install.sh
 2. download `bfosc`
     - `git clone https://github.com/hypergravity/bfosc.git`
 3. revise the parameters in `bfosc_pipeline.py`
