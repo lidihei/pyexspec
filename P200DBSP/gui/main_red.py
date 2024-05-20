@@ -101,7 +101,6 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.setLayout(layout)
 
     def assumption(self):
-        #test_dir = "/share/data/lijiao/Documents/sdOB/example/Feige64/data/spec/P200_rawdata/"
         test_dir = "/share/data/lijiao/Documents/sdOB/example/lan11/data/spec/P200_DBPS/20220219_rawdata/red"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
