@@ -24,7 +24,7 @@ Authors:
     - cd pyexspec/bfoscE9G10/gui
     - python app.py
 - - if extract BFOSC the rot90 must be selected
-<p align="center"><img width="100%" src="bfoscE9G10/E9G10_gui.png" /></p>
+<p align="center"><img width="100%" src="bfoscE9G10/bfosc_gui.png" /></p>
 
 - - bfosc orders reference
 <p align="center"><img width="100%" src="bfoscE9G10/template/bfoscE9G10_orders_rot90.png" /></p>
