@@ -83,7 +83,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/home/sdb216/sdOBdata/Documents/Feige64/data/spec/KECK/"
+        test_dir = "spec_dir/KECK/"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
         self._lamp = joblib.load(f"../template/thar_template_ihdu-{self.ihdu}.z")
