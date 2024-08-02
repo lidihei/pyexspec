@@ -38,7 +38,7 @@ matplotlib.rcParams["font.size"] = 5
 class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
 
     def __init__(self, parent=None, instrument=None,
-                 rot90=True, trimx = [850, 2048], trimy = [0, 2048],
+                 rot90=False, trimx = [850, 2048], trimy = [0, 2048],
                  nwv=None,  wavecalibrate=True, site=None, Napw=2, Napw_bg=2):
         '''
         rot90 [bool] if True rotate the image with 90 degree

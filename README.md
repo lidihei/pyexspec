@@ -21,8 +21,8 @@ Authors:
     - `pip install .`
 
 ## Extracting spectrum of E9G10 of Xinglong 216cm
-    - `cd pyexspec/bfoscE9G10/gui`
-    - `python app.py`
+    - cd pyexspec/bfoscE9G10/gui
+    - python app.py
 - - if extract BFOSC the rot90 must be selected
 <p align="center"><img width="100%" src="bfoscE9G10/E9G10_gui.png" /></p>
 
