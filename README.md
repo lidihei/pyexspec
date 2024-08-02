@@ -10,9 +10,9 @@ Authors:
 ## Installation
 
 1. install `songcn` package
-    - `pip install -U git+git://github.com/hypergravity/songcn`
+    - `pip install -U git+git://github.com/lidihei/songcn`
     - `pip show songcn` should be at least `0.0.9`
-1.1 install 'songcn' package
+1.1.  install 'songcn' package
     - git clone https://github.com/lidihei/songcn.git
     - bash install.sh
 2. download `bfosc`
