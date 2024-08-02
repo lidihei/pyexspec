@@ -73,14 +73,14 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/home/sdb216/sdOBdata/216BFOSC/sdOB_216/20220922_bfosc/"
+        test_dir = "/Users/lijiao/Documents/works/Feige89/data/216cm/20240314_bfosc_liuzhicun/E9G10"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
-        self.ap = joblib.load("/home/sdb216/sdOBdata/216BFOSC/sdOB_216/20220522_bfosc/ap.dump")
-        self._fear = joblib.load("/share/data/sdOBdata/Documents/bfosc-main/E9G10/template/fear_model_order2_12.dump")
-        #self.ap = joblib.load("../aperture_template/ap.dump")
+        #self.ap = joblib.load("/home/sdb216/sdOBdata/216BFOSC/sdOB_216/20220522_bfosc/ap.dump")
+        self._fear = joblib.load("../template/fear_model_order2_12.dump")
+        #self.ap = joblib.load(os.path.join(test_dir, "ap.dump"))
         #self.ap = joblib.load(f"/home/lcq/media/backup/216BFOSC/sdOB_216/20210603_bfosc/ap.dump")
-        self.ap_trace = self.ap.ap_center_interp[:,::-1]
+        #self.ap_trace = self.ap.ap_center_interp[:,::-1]
 
     def initUi(self):
         self.toolButton.clicked.connect(self._select_wd)
@@ -296,6 +296,7 @@ class UiBfosc(QtWidgets.QMainWindow, Ui_MainWindow):
                 self._update_nap()
         except Exception as _e:
             print("Error occurred, aperture not added!")
+            print(_e)
 
     def _del_aperture(self):
         if self.ap_trace.shape[0] == 0:

@@ -24,7 +24,6 @@ from astropy.nddata import CCDData
 from astropy.nddata import block_replicate
 import ccdproc as ccdp
 from photutils.segmentation import detect_sources
-from convenience_functions import show_image, display_cosmic_rays
 from astropy.coordinates import SkyCoord, EarthLocation
 from astropy import units
 from pyexspec.io import iospec2d
@@ -39,7 +38,7 @@ matplotlib.rcParams["font.size"] = 5
 class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
 
     def __init__(self, parent=None, instrument=None,
-                 rot90=False, trimx = [75, 392], trimy = [0, 2834],
+                 rot90=True, trimx = [850, 2048], trimy = [0, 2048],
                  nwv=None,  wavecalibrate=True, site=None, Napw=2, Napw_bg=2):
         '''
         rot90 [bool] if True rotate the image with 90 degree
@@ -126,14 +125,14 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         # self.setLayout(layout)
 
     def assumption(self):
-        #test_dir = "/share/data/lijiao/Documents/sdOB/example/lan11/data/spec/P200_DBPS/20220219_rawdata/blue"
-        #self._wd = test_dir
-        #self.lineEdit_wd.setText(test_dir)
-        self._lamp = joblib.load("../template/fear_template_blue.z")
-        #apfname = f'{self._wd}/ap.dump'
+        test_dir = "/Users/lijiao/Documents/works/Feige89/data/216cm/20240314_bfosc_liuzhicun/E9G10"
+        self._wd = test_dir
+        self.lineEdit_wd.setText(test_dir)
+        self._lamp = joblib.load("../template/fear_model_order2_12.dump")
+        apfname = f'{self._wd}/ap.dump'
         #print(apfname)
-        #self.ap = joblib.load(apfname)
-        #self.ap_trace = self.ap.ap_center_interp
+        self.ap = joblib.load(apfname)
+        self.ap_trace = self.ap.ap_center_interp
 
     def initUi(self):
         self.toolButton.clicked.connect(self._select_wd)
@@ -168,16 +167,22 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
 
     def _make_datatable(self):
         # get file list
-        fps_full = glob.glob(self.lineEdit_wd.text() + "/*.fits")
+        fps_full = glob.glob(self.lineEdit_wd.text() + "/*.fit")
         fps_full.sort()
         self.fps_full = fps_full
         fps = [os.path.basename(_) for _ in fps_full]
         self.nfp = len(fps)
 
         imgtype = np.asarray([fits.getheader(fp)["OBJECT"] for fp in fps_full])
-        imgtype1 = np.asarray([fits.getheader(fp)["IMGTYPE"] for fp in fps_full])
+        try:
+            imgtype1 = np.asarray([fits.getheader(fp)["IMGTYPE"] for fp in fps_full])
+        except:
+            imgtype1 = np.asarray([fits.getheader(fp)["IMAGETYP"] for fp in fps_full])
         exptime = np.asarray([fits.getheader(fp)["EXPTIME"] for fp in fps_full])
-        UTSHUT = np.asarray([fits.getheader(fp)["UTSHUT"] for fp in fps_full])
+        try:
+            UTSHUT = np.asarray([fits.getheader(fp)["UTSHUT"] for fp in fps_full])
+        except:
+            UTSHUT = np.asarray([fits.getheader(fp)["DATE-OBS"] for fp in fps_full])
         ra = [] #np.zeros(len(fps_full))
         dec = [] #np.zeros(len(fps_full))
         for i, fp in enumerate( fps_full):
@@ -335,7 +340,12 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         try: self.ihdu = int(self.lineEdit_hdu.text())
         except: self.ihdu = self.ihdu0
         ### rot90 image
-        self.rot90 = False if self.checkBox_rot90.checkState().value == 0 else True
+        if pyqt5_bool:
+            checkBox_rot90_state = self.checkBox_rot90.checkState()
+        else:
+            checkBox_rot90_state = self.checkBox_rot90.checkState().value
+        if not self.rot90:
+            self.rot90 = False if checkBox_rot90_state == 0 else True
         print(f'checkBox_rot90.checkState() = {self.checkBox_rot90.checkState()}')
         fps_bias = []
         for i in range(self.nfp):
@@ -359,7 +369,8 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         flats = []
         flats_err_squared = []
         for fp in fps_flat:
-            flats.append(self.read_star(fp, remove_cosmic_ray=False))
+            readnoise = fits.getheader(fp)['RDNOISE']
+            flats.append(self.read_star(fp, remove_cosmic_ray=False, readnoise=readnoise))
             flats_err_squared.append(self.image_err_squared)
         self.flats = flats
         #master_flat = np.median(np.array([self._read_img(fp) for fp in fps_flat]), axis=0)
@@ -396,18 +407,18 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
                 self.ax.plot(_trace[ind_plot]-ap_width, np.arange(self.nwv)[ind_plot], "w-.", lw=1)
             except:
                 print('Appeture width is not difined')
-            try:
-                ap_width = self.ap.ap_width
-                _Napw = self.ap.Napw*ap_width; _Napw_bg = self.ap.Napw_bg*ap_width
-                self.ax.plot(_trace[ind_plot]+_Napw, np.arange(self.nwv)[ind_plot], "k--", lw=0.8)
-                self.ax.plot(_trace[ind_plot]+_Napw+_Napw_bg, np.arange(self.nwv)[ind_plot], "k--", lw=0.8)
-                self.ax.plot(_trace[ind_plot]-_Napw, np.arange(self.nwv)[ind_plot], "k--", lw=0.8)
-                self.ax.plot(_trace[ind_plot]-_Napw-_Napw_bg, np.arange(self.nwv)[ind_plot], "k--", lw=0.8)
-            except:
-                print('Background Appeture width is not difined') 
+            #try:
+            #    ap_width = self.ap.ap_width
+            #    _Napw = self.ap.Napw*ap_width; _Napw_bg = self.ap.Napw_bg*ap_width
+            #    self.ax.plot(_trace[ind_plot]+_Napw, np.arange(self.nwv)[ind_plot], "k--", lw=0.8)
+            #    self.ax.plot(_trace[ind_plot]+_Napw+_Napw_bg, np.arange(self.nwv)[ind_plot], "k--", lw=0.8)
+            #    self.ax.plot(_trace[ind_plot]-_Napw, np.arange(self.nwv)[ind_plot], "k--", lw=0.8)
+            #    self.ax.plot(_trace[ind_plot]-_Napw-_Napw_bg, np.arange(self.nwv)[ind_plot], "k--", lw=0.8)
+            #except:
+            #    print('Background Appeture width is not difined') 
         self.canvas.draw()
 
-    def _choose_aperture_image(self):
+    def _choose_aperture_image(self, use_master_flat=True):
         '''
         choose proper image to trace the aperture
         '''
@@ -417,14 +428,18 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         fname = self.fps_full[ind_elected]
         print(fname)
         #fname = input()
-        if fname[-5:] == '.fits':
+        file_extension = os.path.splitext(fname)[-1]
+        if ('fit' in file_extension) and ( not use_master_flat):
             #fname = os.path.basename(fname)
             #fname = os.path.join(self._wd, fname)
             self.fname_aperture = fname
-            image_aperture = self.read_star(fname)
+            readnoise = fits.getheader(fname)['RDNOISE']
+            image_aperture = self.read_star(fname, readnoise = readnoise)
             self.aperture_image = image_aperture
+            print(f'#----Finding aperture from {fname}')
         else:
             self.aperture_image = self.master_flat
+            print(f'#----Finding aperture from master flat')
 
     def trace_local_max(self, img, starting_row, starting_col, maxdev=10, fov=20, ntol=5):
         """ trace aperture from a starting point (row, col) """
@@ -477,9 +492,10 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         #if self.aperture_image is None:
         self._choose_aperture_image()
         _trace = self.trace_local_max(
-            gaussian_filter(self.aperture_image, sigma=5),
-            *np.asarray(self.pos_temp[::-1], dtype=int), maxdev=10, fov=10, ntol=10)
+            gaussian_filter(self.aperture_image, sigma=2),
+            *np.asarray(self.pos_temp[::-1], dtype=int), maxdev=10, fov=20, ntol=5)
         self._trace = _trace
+        print(_trace)
         if np.sum(_trace>0)>100:
             self.ap_trace = np.vstack((self.ap_trace, _trace.reshape(1, -1)))
             self._draw_aperture()
@@ -506,7 +522,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         self._draw_aperture()
 
     def _save_aperture(self):
-        ap_width = 12
+        ap_width = 15
         #from twodspec.aperture import Aperture
         from pyexspec.aperture import Aperturenew as Aperture
         # print(self.ap_trace[:,0])
@@ -660,17 +676,17 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
               site = EarthLocation.from_geodetic(lat=26.6951*u.deg, lon=100.03*u.deg, height=3200*u.m) Lijiang observation
               site = EarthLocation.of_site('Palomar') ## Palomar Observotory
         '''
-        from twodspec.extract import extract_aperture
+        from twodspec.extract import extract_all
         _dir = os.path.dirname(fp)
         basename = os.path.basename(fp)
         rowID = np.where(self.datatable["filename"]== basename)[0][0]
         self.tableWidget_files.selectRow(rowID)
-        bg_deg = 2
-        dirdump = os.path.join(_dir, f'dump_bgdeg{bg_deg}')
+        dirdump = os.path.join(_dir, f'dump')
         self.dirdump = dirdump
         if not os.path.exists(dirdump): os.makedirs(dirdump)
         fp_out = "{}/star-{}.dump".format(dirdump, os.path.basename(fp))
-        star = self.read_star(fp).copy()
+        readnoise = fits.getheader(fp)['RDNOISE']
+        star = self.read_star(fp, readnoise=readnoise).copy()
         #self.tableWidget_files.itemSelectionChanged.connect(self._show_img)
         self._show_img()
         if adjust_aperture:
@@ -681,7 +697,8 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         ####------------ fit back ground --------------------
         #ap_star = self.ap
         star_err_squared = self.image_err_squared
-        bg = self.ap.backgroundnew(star, longslit = True, Napw_bg=self.Napw_bg, deg=bg_deg, num_sigclip=5, Napw=self.Napw, verbose=False)
+        bg = self.ap.backgroundnew(star, longslit = False,q=(40, 40), npix_inter=7, sigma=(20, 20), kernel_size=(21, 21),
+                                   Napw_bg=self.Napw_bg, deg=bg_deg, num_sigclip=5, Napw=self.Napw, verbose=False)
         self._draw_aperture()
         star_withbg = star.copy()
         star_withbg_err_squared =star_err_squared.copy()
@@ -696,32 +713,37 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         self.image_star = star
         self.image_star_err_squared = star_withbg_err_squared
         header = self._modify_header(fp)
-        isot =  f'{header["UTSHUT"]}'
+        try:
+            isot =  f'{header["UTSHUT"]}'
+        except:isot =  f'{header["DATE-OBS"]}'
         time_shut = Time(isot, format='isot', location=site)
         jd = time_shut.jd
         if show:
            fig, ax = plt.subplots(1,1)
            plt.plot(star[irow])
            plt.plot(bg[irow])
-        gain = 1/header['GAIN']
-        ron = header['RON']
+        gain = 1/np.float64(header['GAIN'])
+        try:ron = header['RON']
+        except: ron = header['RDNOISE']
+        ron = np.float64(ron)
         #star1d = self.ap.extract_all(star, gain=gain, ron=ron, n_jobs=1, verbose=False)
         ##### extract with background
-        star1d_withbg = extract_aperture(star_withbg, self.ap.ap_center, im_err_squared = star_withbg_err_squared, n_chunks=8,
+        n_jobs =1
+        star1d_withbg = extract_all(star_withbg, self.ap, im_err_squared = star_withbg_err_squared, n_chunks=8,
                 ap_width=self.ap.ap_width, profile_oversample=10, profile_smoothness=1e-2,
-                num_sigma_clipping=5., gain=gain, ron=ron)
-        star1d_withbg_divide_flat = extract_aperture(star_withbg_divide_flat, self.ap.ap_center,
+                num_sigma_clipping=5., gain=gain, ron=ron, n_jobs=n_jobs)
+        star1d_withbg_divide_flat = extract_all(star_withbg_divide_flat, self.ap,
                 im_err_squared = star_withbg_divide_flat_err_squared, n_chunks=8,
                 ap_width=self.ap.ap_width, profile_oversample=10, profile_smoothness=1e-2,
-                num_sigma_clipping=5., gain=gain, ron=ron)
+                num_sigma_clipping=5., gain=gain, ron=ron, n_jobs=n_jobs)
         ##### extract image - background
-        star1d = extract_aperture(star, self.ap.ap_center, im_err_squared = star_err_squared, n_chunks=8,
+        star1d = extract_all(star, self.ap, im_err_squared = star_err_squared, n_chunks=8,
                 ap_width=self.ap.ap_width, profile_oversample=10, profile_smoothness=1e-2,
-                num_sigma_clipping=5., gain=gain, ron=ron)
-        star1d_divide_flat = extract_aperture(star_divide_flat, self.ap.ap_center,
+                num_sigma_clipping=5., gain=gain, ron=ron, n_jobs=n_jobs)
+        star1d_divide_flat = extract_all(star_divide_flat, self.ap,
                 im_err_squared = star_divide_flat_err_squared, n_chunks=8,
                 ap_width=self.ap.ap_width, profile_oversample=10, profile_smoothness=1e-2,
-                num_sigma_clipping=5., gain=gain, ron=ron)
+                num_sigma_clipping=5., gain=gain, ron=ron, n_jobs=n_jobs)
         #star1d = self._extract_sum(star, self.ap.ap_center, im_err_sqaured=star_err_squared, ap_width=self.ap.ap_width)
         #star1d_divide_flat = self._extract_sum(star_divide_flat, self.ap.ap_center, 
         #                     im_err_sqaured=star_divide_flat_err_squared, ap_width=self.ap.ap_width)
@@ -818,7 +840,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         if show: fig, ax = plt.subplots(1,1)
         for i_star, fp in enumerate(fps_star):
             print("|--({}/{}) processing STAR ... ".format(i_star+1, n_star), end="")
-            self._extract_single_star(fp, master_flat=master_flat,
+            self._extract_single_star(fp, master_flat=master_flat, adjust_aperture=False,
                                 master_flat_err_squared=master_flat_err_squared, site=self.site)
 
         return
@@ -973,12 +995,15 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         --------------------
         suffix [str]  the suffix of file name of QA for calibrating wave
         """
-        lamp = self.read_star(fp)
+        readnoise = fits.getheader(fp)['RDNOISE']
+        lamp = self.read_star(fp, readnoise=readnoise)
         lampbasename = os.path.basename(fp)
         lamp /= self.sensitivity
         header = fits.getheader(fp)
-        gain = 1/header['GAIN']
-        ron = header['RON']
+        gain = 1/np.float64(header['GAIN'])
+        try:ron = header['RON']
+        except: ron = header['RDNOISE']
+        ron = np.float64(ron)
         # unnecessary to remove background
         # fear -= apbackground(fear, ap_interp, q=(10, 10), npix_inter=5,sigma=(20, 20),kernel_size=(21,21))
         # extract 1d fear
@@ -988,11 +1013,14 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
 
         """ corr2d to get initial estimate of wavelength """
         #from wave_calib import wavecalibrate_longslit
-        from pyexspec.wavecalibrate import wclongslit
         from astropy.table import vstack
-
-        wavecalibrate = False if self.checkBox_autowvcalib.checkState().value == 0 else True
+        if pyqt5_bool:
+            checkBox_autowvcalib_state = self.checkBox_autowvcalib.checkState()
+        else:
+            checkBox_autowvcalib_state = self.checkBox_autowvcalib.checkState().value
+        wavecalibrate = False if checkBox_autowvcalib_state == 0 else True
         if wavecalibrate:
+            from pyexspec.wavecalibrate import wclongslit
             wave_calibrate = wclongslit.longslit(wave_template =None, flux_template=None, linelist =  self._lamp["linelist"])
             xshifts = []
             wave_init = []
@@ -1065,7 +1093,9 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
             wave_solu = np.nan; wave_init = np.nan; tab_lines= None
 
         header = self._modify_header(fp)
-        isot =  f'{header["UTSHUT"]}'
+        try:
+            isot =  f'{header["UTSHUT"]}'
+        except:isot =  f'{header["DATE-OBS"]}'
         jd = Time(isot, format='isot').jd
         if wavecalibrate is False:
            print("!!! The wavelenth of this ARC LAMP is not calibrated")
@@ -1138,7 +1168,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     # mainWindow = QtWidgets.QMainWindow()
-    mainprocess = UiExtract(instrument='P200 DBPS blue')
+    mainprocess = UiExtract(instrument='E9G10')
     # ui.setupUi(mainWindow)
     # ui.initUi(mainWindow)
     mainprocess.show()

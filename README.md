@@ -26,5 +26,13 @@ Authors:
 ## E9G10
 Currently, only E9+G10 configuration is tested.
 
+## bfosc E9G10
+
+
+## Manually callibrate wavelength
+-- $cd wvcalib
+-- $python wvclib_app.py
+-- when set value of emission line, you shoud press "Enter/Return" keyboads after input the value into the table.
+
 ## Orders
 <p align="center"><img width="100%" src="E9G10/template/E9G10_orders.png" /></p>

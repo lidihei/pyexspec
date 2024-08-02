@@ -58,8 +58,8 @@ def polyfit_backgroud(x, z, deg=4, min_select=10, nsigma=5, verbose=True, **argw
 
 def straight_line(x, y):
     """ return coefs for a straight line """
-    a = np.float(np.diff(y) / np.diff(x))
-    b = np.float(y[0] - a * x[0])
+    a = np.float64(np.diff(y) / np.diff(x))
+    b = np.float64(y[0] - a * x[0])
     return a, b
 
 
@@ -158,8 +158,8 @@ class Aperturenew(Aperture):
         if ap_width is None: ap_width = self.ap_width
         n_ap = ap_center.shape[0]
         nrow, ncol = img.shape
-        x = np.arange(ncol, dtype=np.float)
-        npix_inter_hf = np.int(npix_inter / 2)
+        x = np.arange(ncol, dtype=np.float64)
+        npix_inter_hf = int(npix_inter / 2)
         if isinstance(q, tuple):
             q = np.linspace(q[0], q[1], n_ap)
 
@@ -187,8 +187,8 @@ class Aperturenew(Aperture):
             if n_ap < 2:
                 i_ap = 0
                 for i_row in range(nrow):
-                    i_med_r = np.int(ap_center[i_ap][i_row] + Napw*ap_width)
-                    i_med_l = np.int(ap_center[i_ap][i_row] - Napw*ap_width)
+                    i_med_r = int(ap_center[i_ap][i_row] + Napw*ap_width)
+                    i_med_l = int(ap_center[i_ap][i_row] - Napw*ap_width)
                     y_med_r = np.percentile(
                         img[i_row, np.max((0, i_med_r - npix_inter_hf)):np.max((1, i_med_r + npix_inter_hf + 1))], q[i_ap])
                     y_med_l = np.percentile(
@@ -208,9 +208,9 @@ class Aperturenew(Aperture):
                             i_med = ap_center[i_ap][i_row]
                             i_med_l = 2 * i_med - i_med_r
 
-                            i_med_r = np.int(i_med_r)
-                            # i_med = np.int(i_med)
-                            i_med_l = np.int(i_med_l)
+                            i_med_r = int(i_med_r)
+                            # i_med = int(i_med)
+                            i_med_l = int(i_med_l)
 
                             y_med_r = np.percentile(
                                 img[i_row, np.max((0, i_med_r - npix_inter_hf)):np.max((1, i_med_r + npix_inter_hf + 1))], q[i_ap])
@@ -227,9 +227,9 @@ class Aperturenew(Aperture):
                                 i_row]) / 2
                             i_med_r = 2 * i_med - i_med_l
 
-                            # i_med = np.int(i_med)
-                            i_med_r = np.int(i_med_r)
-                            i_med_l = np.int(i_med_l)
+                            # i_med = int(i_med)
+                            i_med_r = int(i_med_r)
+                            i_med_l = int(i_med_l)
 
                             y_med_r = np.percentile(
                                 img[i_row, i_med_r - npix_inter_hf:i_med_r + npix_inter_hf + 1], q[i_ap])
@@ -245,9 +245,9 @@ class Aperturenew(Aperture):
                             i_med_l = (ap_center[i_ap - 1][i_row] + ap_center[i_ap][i_row]) / 2
                             i_med_r = (ap_center[i_ap][i_row] + ap_center[i_ap + 1][i_row]) / 2
 
-                            # i_med = np.int(i_med)
-                            i_med_r = np.int(i_med_r)
-                            i_med_l = np.int(i_med_l)
+                            # i_med = int(i_med)
+                            i_med_r = int(i_med_r)
+                            i_med_l = int(i_med_l)
 
                             y_med_r = np.percentile(
                                 img[i_row, np.min((ncol-1, i_med_r - npix_inter_hf)):np.min((ncol, i_med_r + npix_inter_hf + 1))], q[i_ap])

@@ -1,8 +1,10 @@
 import sys, os, glob
 try:
     from PyQt5 import QtCore, QtGui, QtWidgets
+    pyqt5_bool = True
 except:
     from PyQt6 import QtCore, QtGui, QtWidgets
+    pyqt5_bool = False
 from pyexspec.gui import WvClibWindow
 import matplotlib
 import matplotlib.pyplot as plt
@@ -22,6 +24,7 @@ from astropy.nddata import CCDData
 from astropy.nddata import block_replicate
 import ccdproc as ccdp
 from photutils.segmentation import detect_sources
+#from pyexspec.findline import find_lines 
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -46,7 +49,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.add_canvas()
         self.order = 0
         self.assumption() # debug
-        self._get_tab_lin_order()
+        self._get_tab_line_order()
         self.initUi()
         # debug
         self._wd = os.path.dirname(self._arcfile) if wd is None else wd
@@ -93,18 +96,24 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
     def assumption(self):
         test_dir = "test"
         self._wd = test_dir
-        self._arcfile = os.path.join(self._wd, "lamp-blue0062.fits_for_blue0060.fits.dump")
+        self._arcfile = os.path.join(self._wd, "test.dump")
+        test_dir = "test"
+        self._wd = test_dir
+        self._arcfile = os.path.join(self._wd, "lamp-202403140107_SPECSLAMP_FeAr_slit16s_G10_E9.z")
         self._linelistfile = '../arc_linelist/FeAr.dat'
         self.lineEdit_arc.setText(self._arcfile)
         self.lineEdit_linelist.setText(self._linelistfile)
         self._read_linelist(self._linelistfile)
-        self._read_arc(self._arcfile, tablename=self._arcfile)
+        tablename = os.path.join(self._wd, "TABLE", "table_linelist.csv")
+        tablename = self._arcfile
+        self._read_arc(self._arcfile, tablename=tablename)
+        #self._read_arc(self._arcfile, tablename=self._arcfile)
         #self._arcfile = joblib.load(os.path.join(self._wd, "lamp-blue0062.fits_for_blue0060.fits.dump"))
 
     def initUi(self):
         self.toolButton_load_arc.clicked.connect(self._select_arc)
         self.toolButton_load_linelist.clicked.connect(self._select_linelist)
-        self.lineEdit_arc.textChanged.connect(self._get_tab_lin_order)
+        self.lineEdit_arc.textChanged.connect(self._get_tab_line_order)
         self.tableWidget_files.itemSelectionChanged.connect(self._draw_scatter_pos)
         self.pushButton_upper_order.clicked.connect(self._upper_order)
         self.pushButton_next_order.clicked.connect(self._next_order)
@@ -115,6 +124,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.pushButton_del_line.clicked.connect(self._del_line)
         self.pushButton_save_line.clicked.connect(self._save_lines)
         self.pushButton_fit.clicked.connect(self._fit)
+        self.pushButton_autofind.clicked.connect(self._autofind)
         #self.lineEdit_xdeg.setPlaceholderText('X deg (int)')
         #self.lineEdit_xdeg.setText(f"deg(x) = ")
         #self.lineEdit_ydeg.setText(f"deg(y) = ")
@@ -129,11 +139,11 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
     def _read_linelist(self, fileName):
         tab = Table.read(fileName, format='ascii')
         self.tab_linelist = tab
-        self.linelist = tab['wavelength'] 
+        self.linelist = tab['wavelength']
 
     def _select_arc(self):
         fileName,_ = QtWidgets.QFileDialog.getOpenFileName(self, "Open arc", "dump files (*.dump)")
-        self._wd = os.path.direname(fileName)
+        self._wd = os.path.dirname(fileName)
         self.lineEdit_arc.setText(fileName)
         self._arcfile = fileName
         self._read_arc(fileName)
@@ -148,10 +158,16 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
                   that must include 'order', 'xcoord', 'line', 'Fpeak','good',  'wv_fit'
         '''
         self.arcdic = joblib.load(fileName)
-        flux = self.arcdic['flux_arc']
+        try:
+            flux = self.arcdic['flux_arc']
+        except:
+            flux = self.arcdic['spec_extr']
         shape  = flux.shape
-        wave_init = np.array(self.arcdic['wave_init']) if wave_init is None else wave_init
-        wave_solu = np.array(self.arcdic['wave_solu']) if wave_solu is None else wave_solu
+        try:
+            wave_init = np.array(self.arcdic['wave_init']) if wave_init is None else wave_init
+            wave_solu = np.array(self.arcdic['wave_solu']) if wave_solu is None else wave_solu
+        except:
+            print('the arc file does not cantain calibratied wave')
         if len(shape) == 1:
             Norder, Npixel = 1,shape[0]
             flux = np.array([flux]).T
@@ -164,16 +180,18 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             shape_wave = wave_solu.shape
             if len(shape_wave) == 1: wave_solu = np.array([wave_solu]).T
         if tablename is None: tablename = self.tablename_lines
+        print(f'the table name of arc lamp = {tablename}')
         self.wave_inits = wave_init if wave_init is not None else np.ones_like(flux)
         self.wave_solus = wave_solu if wave_solu is not None else self.wave_inits.copy()
         self.fluxes = flux
         self.Norder = Norder
         self.tables = self._read_linetable(Norder=Norder, tablename=tablename)
         self.Npixel = Npixel
-        self.Xgrid, self.Ygrid = np.meshgrid(np.arange(Norder), np.arange(Npixel))
+        #self.Xgrid, self.Ygrid = np.meshgrid(np.arange(Norder), np.arange(Npixel))
+        self.Xgrid, self.Ygrid = np.meshgrid(np.arange(Npixel), np.arange(Norder))
         self.xindex = np.arange(Npixel)
         self._update_order()
-        self.tab_lin_order = self.tables[0]
+        self.tab_line_order = self.tables[0]
         #self._draw_spec()
         #self._draw_residual()
         #self._draw_wvfit()
@@ -204,7 +222,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         orders = np.arange(Norder)
         if (tablename is None) and (table is None):
             names = ['order', 'xcoord', 'line', 'maskgood', 'wv_fit', 'Fpeak']
-            tables = [Table(data= [[i],[0.], [0.], [0], [0.], [0.]], names=names) for i in orders]
+            tables = [Table(data= [[i],[-999.], [-999.], [0], [-999.], [-999.]], names=names) for i in orders]
         else:
             if table is None:
                 filetype = tablename.split('.')[-1]
@@ -215,13 +233,16 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
                     except:
                         tab = joblib.load(tablename)['tab_lines']
                         if isinstance(tab, list): tab = vstack(tab)
-                    tab.rename_columns(['line_x_ccf', 'line_wave_init_ccf', 'line_peakflux', 'ind_good', ],
-                                       ['xcoord', 'wv_fit', 'Fpeak', 'maskgood'])
+                    colnames_old = ['line_x_ccf', 'line_wave_init_ccf', 'line_peakflux', 'ind_good']
+                    colnames_new = ['xcoord', 'wv_fit', 'Fpeak', 'maskgood']
+                    for _i, colname in enumerate(colnames_old):
+                        if colname in tab.colnames:
+                            tab.rename_column(colname, colnames_new[_i])
                 else:
-                    tab = Table.read(tabname)
+                    tab = Table.read(tablename)
             else:
-                tab = tabel
-            tab = tab[np.array(tab['maskgood'], dtype=bool)]
+                tab = table
+            #tab = tab[np.array(tab['maskgood'], dtype=bool)]
             colnames = tab.colnames
             def change_columorder(colnames,_i, name):
                 colnames1 = colnames.copy()
@@ -232,13 +253,13 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             for _i, _name in enumerate(['order', 'xcoord', 'line', 'maskgood', 'wv_fit', 'Fpeak' ]):
                 colnames = change_columorder(colnames, _i, _name)
             tab = tab[colnames]
-            tables = self._split_tab_lin_all(tab_lin_all=tab)
-        self.tab_lin_all = vstack(tables)
+            tables = self._split_tab_line_all(tab_line_all=tab)
+        self.tab_line_all = vstack(tables)
         self.colnames = tables[0].colnames
         return tables
 
-    def _split_tab_lin_all(self, tab_lin_all=None):
-        tab = self.tab_lin_all if tab_lin_all is None else tab_lin_all
+    def _split_tab_line_all(self, tab_line_all=None):
+        tab = self.tab_line_all if tab_line_all is None else tab_line_all
         orders = np.arange(self.Norder)
         tables = [tab[tab['order'] == i] for i in orders]
         self.tables = tables
@@ -249,9 +270,9 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
 
     def _make_datatable(self):
         iorder = self.order
-        tab_lin_order =  self.tables[iorder]
+        tab_line_order =  self.tables[iorder]
         #datatable.sort('xcoord')
-        self.tab_lin_order = tab_lin_order
+        self.tab_line_order = tab_line_order
         self.color_list = [[255, 255, 255],
                            [211, 211, 211]]
         #                   [255, 182, 193],
@@ -260,7 +281,11 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
 
 
     def _find_line(self, line_tmp, linelist=None):
-        if (line_tmp ==0) and self.checkBox_xaxis_wave.checkState().value != 0:
+        try:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState()
+        except:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState().value
+        if (line_tmp ==0) and checkBox_xaxis_wave_state != 0:
            try: line_tmp = self.wv_max
            except: line_tmp = 0
         if linelist is None:
@@ -276,53 +301,57 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self._update_datatable(addlinebool=True)
 
     def _update_datatable(self, addlinebool=True):
-        Nrow = np.arange(len(self.tab_lin_order))
-        self.tab_lin_order["maskgood"] = [self.tableWidget_files.cellWidget(irow, 3).currentIndex() for irow in Nrow]
+        Nrow = np.arange(len(self.tab_line_order))
+        self.tab_line_order["maskgood"] = [self.tableWidget_files.cellWidget(irow, 3).currentIndex() for irow in Nrow]
         if addlinebool:
             try:
                 currentitem = self.tableWidget_files.currentItem()
-                colname = self.tab_lin_order.colnames[currentitem.column()]
-                line_tmp = np.float(currentitem.text())
+                colname = self.tab_line_order.colnames[currentitem.column()]
+                print(f'colname = {colname}')
+                line_tmp = np.float64(currentitem.text())
+                print(f'currentitem.text() = {currentitem.text()}')
                 line = self._find_line(line_tmp, linelist=None)
-                _tab = self.tab_lin_order
+                _tab = self.tab_line_order
                 _tab[currentitem.row()][colname] = line
-                self.tab_lin_order =_tab
-            except:
-                print("'NoneType' object has no attribute 'column'")
+                self.tab_line_order =_tab
+            except Exception as e:
+                print(e)
+                print('set value for the line in Table')
+            #    print("'NoneType' object has no attribute 'column'")
         self._refresh_datatable()
-        self.tables[self.order]= self.tab_lin_order
+        self.tables[self.order]= self.tab_line_order
         tab = vstack(self.tables)
         self.tab_line_all = tab
         #self._draw_wvfit()
         #self._draw_residual()
 
-    def _get_tab_lin_order(self):
+    def _get_tab_line_order(self):
         self._make_datatable()
         self._refresh_datatable()
 
     def _refresh_datatable(self):
-        if self.tab_lin_order is None:
+        if self.tab_line_order is None:
             return
         # change to Table Widget
         self.tableWidget_files.clear()
         self.tableWidget_files.verticalHeader().setVisible(True)
-        Nrow = len(self.tab_lin_order)
+        Nrow = len(self.tab_line_order)
         self.tableWidget_files.setRowCount(Nrow)
         n_col = 6
         self.tableWidget_files.setColumnCount(n_col)
-        self.tableWidget_files.setHorizontalHeaderLabels(self.tab_lin_order.colnames)
+        self.tableWidget_files.setHorizontalHeaderLabels(self.tab_line_order.colnames)
         for irow in range(Nrow):
-            self.tableWidget_files.setItem(irow, 0, QtWidgets.QTableWidgetItem(str(self.tab_lin_order["order"][irow])))
-            self.tableWidget_files.setItem(irow, 1, QtWidgets.QTableWidgetItem(str(self.tab_lin_order["xcoord"][irow])))
-            self.tableWidget_files.setItem(irow, 2, QtWidgets.QTableWidgetItem(str(self.tab_lin_order["line"][irow])))
+            self.tableWidget_files.setItem(irow, 0, QtWidgets.QTableWidgetItem(str(self.tab_line_order["order"][irow])))
+            self.tableWidget_files.setItem(irow, 1, QtWidgets.QTableWidgetItem(str(self.tab_line_order["xcoord"][irow])))
+            self.tableWidget_files.setItem(irow, 2, QtWidgets.QTableWidgetItem(str(self.tab_line_order["line"][irow])))
             comboBoxItem = QtWidgets.QComboBox()
             comboBoxItem.addItems(['drop', 'good'])
-            # print(self.type_dict[self.tab_lin_order["type"][irow]])
-            good_bool = int(self.tab_lin_order["maskgood"][irow])
+            # print(self.type_dict[self.tab_line_order["type"][irow]])
+            good_bool = int(self.tab_line_order["maskgood"][irow])
             comboBoxItem.setCurrentIndex(good_bool)
             self.tableWidget_files.setCellWidget(irow, 3, comboBoxItem)
-            self.tableWidget_files.setItem(irow, 4, QtWidgets.QTableWidgetItem(str(self.tab_lin_order["wv_fit"][irow])))
-            self.tableWidget_files.setItem(irow, 5, QtWidgets.QTableWidgetItem(f'{self.tab_lin_order["Fpeak"][irow]:.2f}'))
+            self.tableWidget_files.setItem(irow, 4, QtWidgets.QTableWidgetItem(str(self.tab_line_order["wv_fit"][irow])))
+            self.tableWidget_files.setItem(irow, 5, QtWidgets.QTableWidgetItem(f'{self.tab_line_order["Fpeak"][irow]:.2f}'))
 
             for icol in range(3):
                 self.tableWidget_files.item(irow, icol).setBackground(
@@ -330,20 +359,27 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
 
         self.tableWidget_files.resizeColumnsToContents()
         self.tableWidget_files.resizeRowsToContents()
-        self._get_selfxcoord()
+        self._get_selfxcoord(xname='xcoord', yname='Fpeak', wvname='line')
 
-    def _get_selfxcoord(self, xname='xcoord', yname='Fpeak', wvname='wv_fit'):
-        if self.checkBox_xaxis_wave.checkState().value == 0:
+    def _get_selfxcoord(self, xname='xcoord', yname='Fpeak', wvname='line'):
+        try:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState()
+        except:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState().value
+        tab = self.tab_line_order.copy()
+        if checkBox_xaxis_wave_state == 0:
             self.xcoord = self.xindex
-            self.xscatter = self.tab_lin_order[xname]
+            self.xscatter = tab[xname]
         else:
+            if wvname == 'line':
+                tab = tab[tab['line']>0]
             self.xcoord = self.wave_solus[self.order]
-            self.xscatter = self.tab_lin_order[wvname]
-        self.yscatter = self.tab_lin_order[yname]
+            self.xscatter = tab[wvname]
+        self.yscatter = tab[yname]
 
-    def _draw_scatter_pos(self, **keywds):
-        ind_currentRow = self.tableWidget_files.currentRow()
-        _tab = self.tab_lin_order[ind_currentRow]
+    def _draw_scatter_pos(self, ind_currentRow=None, **keywds):
+        if ind_currentRow is None: ind_currentRow = self.tableWidget_files.currentRow()
+        _tab = self.tab_line_order[ind_currentRow]
         print("Plot order {}: xcoord = {}".format(*_tab['order', 'xcoord']))
         # try to draw it
         self.pos_line = [_tab['xcoord'], _tab['Fpeak']]
@@ -354,19 +390,24 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             self.scatter_pos_flux.remove()
         except:
             pass
-        scatter_pos_flux = self.ax.scatter(xscatter, yscatter, marker='o', lw=1, color='b',facecolors='None', **keywds)
-        self.scatter_pos_flux = scatter_pos_flux
-        self.canvas.draw()
+        if yscatter != -999:
+             scatter_pos_flux = self.ax.scatter(xscatter, yscatter, marker='o', lw=1, color='g',facecolors='None', **keywds)
+             self.scatter_pos_flux = scatter_pos_flux
+             self.canvas.draw()
         try:self.fitWindow._draw_scatter_pos()
         except: pass
 
     def _plot_spec(self):
         self._draw_spec()
 
-    def _draw_spec(self, xname='xcoord', yname='Fpeak', wvname='wv_fit'):
+    def _draw_spec(self, xname='xcoord', yname='Fpeak', wvname='line'):
         # draw
-        self._get_selfxcoord()
-        if self.checkBox_xaxis_wave.checkState().value == 0:
+        self._get_selfxcoord(xname=xname, yname=yname, wvname=wvname)
+        try:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState()
+        except:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState().value
+        if checkBox_xaxis_wave_state == 0:
             self.ax.set_xlabel('Pixel')
         else:
             self.ax.set_xlabel('Wavelength')
@@ -376,20 +417,21 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         flux = self.fluxes[self.order]
         #self.figure.clear()
         self.ax.clear()
-        self.ax.plot(x, flux, color='k', lw=1)
-        self.ax.scatter(x, flux, s=2, color='k')
+        self.ax.plot(x, flux, color='k', lw=1, alpha=0.5)
+        self.ax.scatter(x, flux, s=2, color='k', facecolor='none')
         #if tab is not None:
         #    self.ax.scatter(xscatter, yscatter, marker='o', lw=1, color='b',facecolors='None')
-        if self.tab_lin_order is not None:
-            _ind = self.tab_lin_order['maskgood'] == 1
+        if self.tab_line_order is not None:
+            _ind = (self.tab_line_order['maskgood'] == 1)
+            _ind1 = (self.tab_line_order['xcoord'] >= 0)
             self.ax.scatter(xscatter[_ind], yscatter[_ind], marker='+', lw=1, color='b', label='Good')
-            ind_ = ~_ind
+            ind_ = (~_ind) & _ind1
             self.ax.scatter(xscatter[ind_], yscatter[ind_], marker='x', lw=1, color='r', label='Bad')
             self.ax.legend()
         #ax.secondary_xaxis?
         # refresh canvas
         self.ax.set_ylabel('Counts')
-        if self.checkBox_xaxis_wave.checkState().value == 0:
+        if checkBox_xaxis_wave_state == 0:
             self.ax.set_xlabel('Pixel')
         self.canvas.mpl_connect('button_press_event', self.onclick)
         self.canvas.draw()
@@ -401,18 +443,19 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         # ref: https://matplotlib.org/stable/users/event_handling.html
         # https://stackoverflow.com/questions/39351388/control-the-mouse-click-event-with-a-subplot-rather-than-a-figure-in-matplotlib
         if event.inaxes == self.ax:
-           tab = self.tab_lin_order
+           tab = self.tab_line_order
            self.pos_line_clickevent = event.xdata, event.ydata
            x_tmp, y_tmp = event.xdata, event.ydata
            #dx = np.abs(tab['xcoord'] - x_tmp)
            dx = np.abs(self.xscatter - x_tmp)
-           ind = np.where(dx == np.min(dx))[0][0]
+           self.dx_test = dx
+           ind = np.nanargmin(dx)
            print(f'rowID = {ind}')
            print(f'(x_tmp, y_tmp) = [{x_tmp}, {y_tmp}]')
         _tab = tab[ind]
         xclick = self.xscatter[ind].copy()
         order = int(_tab['order'])
-        self.tab_lin_order = self.tables[order]
+        self.tab_line_order = self.tables[order]
         print('order=', order)
         self.order = order
         self._refresh_datatable()
@@ -439,15 +482,15 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
     def _upper_order(self):
         order = self.order -1 if (self.order > 0) else self.Norder-1
         self.order = order
-        self.tab_lin_order = self.tables[order]
+        self.tab_line_order = self.tables[order]
         self._refresh_datatable()
         self._draw_spec()
         self._update_order()
 
     def _next_order(self):
-        order = self.order +1 if (self.order < self.Norder) else 0
+        order = self.order +1 if (self.order < self.Norder-1) else 0
         self.order = order
-        self.tab_lin_order = self.tables[order-1]
+        self.tab_line_order = self.tables[order]
         self._refresh_datatable()
         self._draw_spec()
         self._update_order()
@@ -458,101 +501,114 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
 
 
     def find_local_max(self, x, y, x_tmp, y_tmp, index_window=7, x_window =7,  Gaussianfit=False):
+        '''
+        If using Gassian function to find peak, index_window (Ind Windows) is the window width to find max;
+        x_window (X Window) is the window width to fit Gaussian function.
+        '''
         ds_squared = (x-x_tmp)**2 + (y-y_tmp)**2
-        ind_nearest = np.argmin(ds_squared)
+        ind_nearest = np.nanargmin(ds_squared)
         ind_l = ind_nearest-index_window
         y_select = y[ind_l: ind_nearest+index_window]
         indmax = ind_l + np.argmax(y_select)
         x_max, y_max = x[indmax], y[indmax]
+        ind_max = indmax
+        try:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState()
+        except:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState().value
+        xarange = x if checkBox_xaxis_wave_state == 0 else np.arange(len(x))
+        ind = (xarange >= indmax -x_window) & (xarange < indmax+x_window)
         if Gaussianfit:
             from pyexspec.fitfunc.function import gaussian_linear_func
             from scipy.optimize import curve_fit
-            p0 = [y_max/2, x_max, dx/2, 0, 0]
-            ind = (x >= x_max -x_window) & (x < x_max+x_window)
-            xdata = x[ind]
+            p0 = [y_max/2, indmax, index_window/2, 0, 0]  # A mu sigma, K c
+            xdata = xarange[ind]
             ydata = y[ind]
+            print(xdata)
             popt, pcov = curve_fit(gaussian_linear_func, xdata, ydata, p0=p0)
-            print('Gaussian Fit A={}, mu={}, sigma={}, k={}, c={}'.format(*popt))
-            x_max = popt[1]
-            y_max = gaussian_linear_func(x_max, *popt)
-            self.wv_max = 0
-        if self.checkBox_xaxis_wave.checkState().value != 0:
-            wv_max = x_max.copy()
-            self.wv_max = wv_max
-            dw = np.abs(x - wv_max)
-            ind = np.argmin(dw)
-            wind = x[ind]
-            print(f'w_max - wind = {wv_max} - {wind}')
-            sign = np.sign(wv_max - wind)
-            if sign == 0:
-                 x_max = ind
-            else:
-                 x_max = np.interp(wv_max, [wind, self.xcoord[ind+sign]], [ind, ind+sign])
-        print(f'[x_max, y_max] = [{x_max}, {y_max}]')
-        return x_max, y_max
+            print('Gaussian peak A={}, mu={}, sigma={}, k={}, c={}'.format(*popt))
+            ind_max = popt[1]
+            y_max = gaussian_linear_func(popt[1], *popt)
+        if checkBox_xaxis_wave_state == 0:
+            self.wv_max = np.nan
+        else:
+            self.wv_max = np.interp(ind_max, xarange[ind], x[ind])
+        print(f'[x_max, y_max] = [{x_max}, {y_max}]; ind_max = {ind_max}')
+        return ind_max, y_max
 
 
     def _add_line(self):
         x = self.xcoord
         y = self.fluxes[self.order]
         x_tmp, y_tmp = self.pos_line_clickevent
+        try:
+            checkBox_gaussianfit_state = self.checkBox_gaussianfit.checkState()
+        except:
+            checkBox_gaussianfit_state = self.checkBox_gaussianfit.checkState().value
 
-        if self.checkBox_gaussianfit.checkState().value != 0:
+        if checkBox_gaussianfit_state != 0:
            Gaussianfit = True
-        else: Gaussianfit = False; print('ddd')
+        else: Gaussianfit = False; print('Finding peak by maxium value')
         try: index_window = int(self.lineEdit_index_window.text())
         except: index_window = 7
         try: x_window = float(self.lineEdit_x_window.text())
         except: x_window = 7
         x_max, y_max = self.find_local_max(x, y, x_tmp, y_tmp, index_window=index_window, x_window=x_window, Gaussianfit=Gaussianfit)
-        _tab = self.tab_lin_order
+        _tab = self.tab_line_order
         ind = (_tab['xcoord'] == x_max)  & (_tab['Fpeak'] == y_max)
         if any(ind):
             print('This line is existence!')
+            self._update_datatable(addlinebool=True)
         else:
             try:
-                _tab = self._add_tab_oneline(dtype=self.tab_lin_order.dtype)
+                _tab = self._add_tab_oneline(dtype=self.tab_line_order.dtype)
             except:
-                _tab = self._add_tab_oneline(colnames=self.tab_lin_order.colnames)
+                _tab = self._add_tab_oneline(colnames=self.tab_line_order.colnames)
             _tab['xcoord'] = x_max
             _tab['Fpeak'] = y_max
             _tab['wv_fit'] = self.wv_max
-            _tab = vstack([_tab, self.tab_lin_order])
+            _tab = vstack([_tab, self.tab_line_order])
             _tab.sort('xcoord')
-            self.tab_lin_order = _tab
-            self.tables[self.order]= self.tab_lin_order
-            self.tab_lin_all = vstack(self.tables)
+            self.tab_line_order = _tab
+            self.tables[self.order]= self.tab_line_order
+            self.tab_line_all = vstack(self.tables)
             print("An line is added")
         self._refresh_datatable()
-        self.pos_line = [x_max, y_max]
         self._update_datatable(addlinebool=True)
-        if self.checkBox_xaxis_wave.checkState().value != 0: x = self.wv_max
-        self._draw_add_line(x, y_max)
+        self.pos_line = [x_max, y_max]
+        try:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState()
+        except:
+            checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState().value
+        if checkBox_xaxis_wave_state != 0: x_max = self.wv_max
+        self._draw_add_line(x_max, y_max)
         try: self.fitWindow._update_fitWindow(UiWvcalib=self)
         except:pass
 
     def _del_line(self):
-        if len(self.tab_lin_order) == 0:
-            print(f'The Number of lines = {len(self.tab_lin_order)}')
+        if len(self.tab_line_order) == 0:
+            print(f'The Number of lines = {len(self.tab_line_order)}')
             return
         x_tmp, y_tmp = self.pos_line
-        _tab = self.tab_lin_order
+        _tab = self.tab_line_order
         dx = np.abs(_tab['xcoord'] - x_tmp)
         ind = dx == np.min(dx)
         _tab = _tab[~ind]
-        self.tab_lin_order = _tab
-        self.tables[self.order]= self.tab_lin_order
+        self.tab_line_order = _tab
+        self.tables[self.order]= self.tab_line_order
         tab = vstack(self.tables)
-        self.tab_lin_all = tab
+        self.tab_line_all = tab
         self._refresh_datatable()
         self._update_datatable(addlinebool=False)
         self._draw_spec()
-        self.fitWindow._update_fitWindow(UiWvcalib=self)
+        try:self.fitWindow._update_fitWindow(UiWvcalib=self)
+        except: pass
         print("Delete a line")
 
     def _save_lines(self):
         dire_table = os.path.join(self._wd, 'TABLE')
         tab = self.tab_line_all
+        print('##---save_lines---------------')
         if not os.path.exists(dire_table): os.makedirs(dire_table)
         tab.write(os.path.join(dire_table, 'table_linelist.csv'), overwrite=True)
         self._draw_spec()
@@ -582,15 +638,16 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             ydeg = int(self.lineEdit_ydeg.text())
         except:
             ydeg = 1
-        tab = self.tab_lin_all
+        tab = self.tab_line_all.copy()
         x, y, z, indselect = tab['xcoord'], tab['order'], tab['line'], tab['maskgood']
         indselect = np.array(indselect, dtype=bool)
+        print(f'np.sum(indselect) = {np.sum(indselect)}')
         if Fittername == 'Poly1DFitter':
             deg = xdeg
             Fitter = Polyfitdic[Fittername]
             Polyfunc = Fitter(x[indselect], z[indselect], deg=xdeg, pw=2, robust=False)
             wv_fit = Polyfunc.predict(x)
-            wave_solu = np.array([Polyfunc.predict(self.xindex)])
+            wave_solu = np.array([Polyfuncse.predict(self.xindex)])
         elif Fittername == 'Poly2DFitter':
             Fitter = Polyfitdic[Fittername]
             deg = (xdeg, ydeg)
@@ -600,11 +657,11 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.Polyfunc = Polyfunc
         self.wave_solus = wave_solu
         tab['wv_fit'] = wv_fit
-        self.tab_lin_all = tab
-        tables = self._split_tab_lin_all()
+        self.tab_line_all = tab
+        tables = self._split_tab_line_all()
         #self._draw_wvfit()
         #self._draw_residual()
-        self._update_datatable()
+        #self._update_datatable(addlinebool=False) ## lijiao
         #Polyfunc = Poly1DFitter(x[indselect], z[indselect], deg=xdeg, pw=2, robust=False)
         # pf2 = Poly2DFitter(x[indselect], y[indselect], z[indselect], deg=deg, pw=2, robust=False)
         #try: plt.close(self.fitWindow.fig)
@@ -619,16 +676,16 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         #self.fitWindow._draw_wvfit()
         #self.fitWindow._draw_residual()
         self._save_fit_resault()
-        self._wave_template()
+        #self._wave_template()
         pass
 
     def _save_fit_resault(self):
         self.savedata = self.arcdic.copy()
         self.savedata['wave_solu'] = self.wave_solus
-        self.savedata['tab_lines'] = self.tab_lin_all
-        self.savedata['nlines'] = np.sum(self.tab_lin_all['maskgood'])
+        self.savedata['tab_lines'] = self.tab_line_all
+        self.savedata['nlines'] = np.sum(self.tab_line_all['maskgood'])
         self.savedata['deg'] = (self.fit_deg, 'The degree of the 1D polynomial')
-        tab = self.tab_lin_all
+        tab = self.tab_line_all
         ind = tab['maskgood'] == 1
         rms = np.std(tab[ind]['wv_fit'] - tab[ind]['line'])
         self.savedata['rms'] = rms
@@ -645,6 +702,20 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         fname = os.path.join(self._wd, f'arc_template_spec.z')
         joblib.dump(templatedic, fname)
 
+    def _autofind(self, wave_init: np.array = None, flux: np.array = None, ccf_kernel_width=1.5):
+        '''
+        automaticlly find lines by using CCF
+        npix_chunk : int, optional
+        the chunk length (half). The default is 20.
+        ccf_kernel_width: float, the default is 1.5
+        '''
+        if wave_init is None: wave_init = self.wave_solus
+        if flux is None: flux = self.fluxes
+        try: npix_chunk = int(self.lineEdit_npix_chunk.text())
+        except: npix_chunk = 20
+        try: ccf_kernel_width = int(self.lineEdit_ccf_kernel_width.text())
+        except: ccf_kernel_width = 20
+        tab_lines = find_lines(wave_init, flux, self.linelist, npix_chunk=npix_chunk, ccf_kernel_width=ccf_kernel_width)
 
 
 class fitWindow(QtWidgets.QWidget):
@@ -658,7 +729,7 @@ class fitWindow(QtWidgets.QWidget):
         self._draw_residual()
         #self.show()
 
-    def add_canvas(self): 
+    def add_canvas(self):
         self.setWindowTitle("Fitting Window")
         self.widget_fit = QtWidgets.QWidget()
         self.widget_fit.setObjectName("widget_fit")
@@ -700,32 +771,34 @@ class fitWindow(QtWidgets.QWidget):
         self._draw_residual()
 
     def _draw_wvfit(self, tab=None, ax=None):
-        tab = self.UiWvcalib.tab_lin_all if tab is None else tab
+        tab = self.UiWvcalib.tab_line_all if tab is None else tab
         ax = self.axs[0] if ax is None else ax
         ax.clear()
-        x = tab['xcoord']
-        y = tab['line']
-        wvfit = tab['wv_fit']
+        orders = np.unique(tab['order'])
         ax.clear()
-        maskgood = np.array(tab['maskgood'], dtype=bool)
-        ax.scatter(x[maskgood], y[maskgood], marker='+', color='b', label='Good', lw=1)
-        ax.scatter(x[~maskgood], y[~maskgood], marker='x', color='r', label='Bad', lw=1)
-        ax.plot(x, wvfit, color='k')
+        for _order in orders:
+            _ind = tab['order'] == _order
+            x = tab[_ind]['xcoord']
+            y = tab[_ind]['line']
+            wvfit = tab[_ind]['wv_fit']
+            maskgood = np.array(tab[_ind]['maskgood'], dtype=bool)
+            ax.scatter(x[maskgood], y[maskgood], marker='+', color='b', label='Good', lw=1)
+            ax.scatter(x[~maskgood], y[~maskgood], marker='x', color='r', label='Bad', lw=1)
+            ax.plot(x, wvfit, color='k')
         ax.set_ylabel(r'$\lambda$ (${\rm \AA}$)')
-        ax.plot(x, wvfit, color='k')
         ax.set_ylabel(r'$\lambda$ (${\rm \AA}$)')
         self.canvas.mpl_connect('button_press_event', self.onclick)
         self.canvas.draw()
 
     def _draw_residual(self, table=None, ax=None):
-        if table is None: table = self.UiWvcalib.tab_lin_all
+        if table is None: table = self.UiWvcalib.tab_line_all
         ax = self.axs[1] if ax is None else ax
         ax.clear()
         x = table['xcoord']
         y = table['line']- table['wv_fit']
         maskgood = np.array(table['maskgood'], dtype=bool)
         ax.scatter(x[maskgood], y[maskgood], marker='+', lw=1, color='b', label='Good')
-        ax.scatter(x[~maskgood], y[~maskgood], marker='x', lw=1, color='r', label='Bad')
+        #ax.scatter(x[~maskgood], y[~maskgood], marker='x', lw=1, color='r', label='Bad')
         ax.axhline(y=0, lw=0.8, ls='--', color='k')
         ax.set_ylabel(r'Res. (${\rm \AA}$)')
         ax.set_xlabel('Pixel')
@@ -736,32 +809,39 @@ class fitWindow(QtWidgets.QWidget):
         # capture cursor position ===============
         # ref: https://matplotlib.org/stable/users/event_handling.html
         # https://stackoverflow.com/questions/39351388/control-the-mouse-click-event-with-a-subplot-rather-than-a-figure-in-matplotlib
-        _tab = self.UiWvcalib.tab_lin_order
+        _tab = self.UiWvcalib.tab_line_order
         if event.inaxes == self.axs[0]:
-           tab = self.UiWvcalib.tab_lin_all
+           tab = self.UiWvcalib.tab_line_all
            x_tmp, y_tmp = event.xdata, event.ydata
            y = tab['wv_fit']
            dx = np.sqrt((tab['xcoord']-x_tmp)**2 +(y-y_tmp)**2)
            ind = np.where(dx == np.min(dx))[0][0]
         elif event.inaxes == self.axs[1]:
-           tab = self.UiWvcalib.tab_lin_all
+           tab = self.UiWvcalib.tab_line_all
            x_tmp, y_tmp = event.xdata, event.ydata
            res = tab['line'] - tab['wv_fit']
            dx = np.sqrt((tab['xcoord']-x_tmp)**2 +(res-y_tmp)**2)
            ind = np.where(dx == np.min(dx))[0][0]
         _tab = tab[ind]
         iorder = int(_tab['order'])
-        self.UiWvcalib.tab_lin_order = self.UiWvcalib.tables[iorder]
-        print('iorder=', iorder)
+        self.UiWvcalib.tab_line_order = self.UiWvcalib.tables[iorder]
         self.order = iorder
         #self.UiWvcalib._refresh_datatable()
-        rowID = np.where(self.UiWvcalib.tab_lin_order['xcoord']==_tab['xcoord'])[0][0]
+        rowID = np.where(self.UiWvcalib.tab_line_order['xcoord']==_tab['xcoord'])[0][0]
+        print(f'iorder={iorder}; rowID = {rowID}')
         self.UiWvcalib.tableWidget_files.selectRow(rowID)
+        self.UiWvcalib.order =  iorder
+        self.UiWvcalib._refresh_datatable()
+        self.UiWvcalib._draw_spec()
+        self.UiWvcalib._update_order()
+        self.UiWvcalib.tableWidget_files.selectRow(rowID)
+        #self.UiWvcalib._draw_scatter_pos(ind_currentRow=rowID)
+        #self._draw_scatter_pos()
         #self.UiWvcalib.rowID = rowID
 
     def _draw_scatter_pos(self, tab=None, ind_currentRow=None, **keywds):
         ind_currentRow = self.UiWvcalib.tableWidget_files.currentRow() if ind_currentRow is None else ind_currentRow
-        _tab = self.UiWvcalib.tab_lin_order[ind_currentRow] if tab is None else tab
+        _tab = self.UiWvcalib.tab_line_order[ind_currentRow] if tab is None else tab
         print("fitWindow Plot order {}: xcoord = {}".format(*_tab['order', 'xcoord']))
         # try to draw it
         self.UiWvcalib.pos_line = [_tab['xcoord'], _tab['Fpeak']]
@@ -772,8 +852,8 @@ class fitWindow(QtWidgets.QWidget):
             self.scatter_pos_resid.remove()
         except: pass
         try:
-            self.scatter_pos_wvfit = self.axs[0].scatter(_tab['xcoord'], _tab['line'], marker='o', lw=1, color='b',facecolors='None', **keywds)
-            self.scatter_pos_resid = self.axs[1].scatter(_tab['xcoord'], _tab['line'] - _tab['wv_fit'], marker='o', lw=1, color='b',facecolors='None', **keywds)
+            self.scatter_pos_wvfit = self.axs[0].scatter(_tab['xcoord'], _tab['line'], marker='o', lw=1, color='g',facecolors='None', **keywds)
+            self.scatter_pos_resid = self.axs[1].scatter(_tab['xcoord'], _tab['line'] - _tab['wv_fit'], marker='o', lw=1, color='g',facecolors='None', **keywds)
             self.canvas.draw()
         except:
             pass
@@ -786,8 +866,7 @@ if __name__ == "__main__":
     # ui.setupUi(mainWindow)
     # ui.initUi(mainWindow)
     mainprocess.show()
-    try:
+    if pyqt5_bool:
         sys.exit(app.exec_())# pyqt5
-        #sys.exit(app.exec())# pyqt5
-    except:
+    else:
         sys.exit(app.exec())# pyqt6

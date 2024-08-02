@@ -77,8 +77,14 @@ class iospec2d():
         ihdu = self.ihdu
         data = self._read_img(fp_star)
         if gain is None: gain = hdu[ihdu].header['gain']
-        if readnoise is None: readnoise = hdu[ihdu].header['RON']
+        if readnoise is None:
+            try:
+                readnoise = hdu[ihdu].header['RON']
+            except:
+                readnoise = hdu[ihdu].header['RONOISE']
         hdu.close()
+        gain = np.float64(gain)
+        readnoise = np.float64(readnoise)
         image = data- master_bias
         bias_err_squared = np.nanvar(master_bias)
         bias_err_squared = self.master_bias_err_squared if  master_bias_err_squared is None else master_bias_err_squared
