@@ -12,7 +12,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 import numpy as np
-from astropy.table import Table, vstack
+from astropy.table import Table, vstack, hstack
 from astropy.io import fits
 from collections import OrderedDict
 from scipy.ndimage import gaussian_filter
@@ -48,11 +48,11 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.setupUi(self)
         self.add_canvas()
         self.order = 0
-        self.assumption() # debug
-        self._get_tab_line_order()
+        #self.assumption() # debug
         self.initUi()
         # debug
-        self._wd = os.path.dirname(self._arcfile) if wd is None else wd
+        #self._wd = os.path.dirname(self._arcfile) if wd is None else wd
+        self.templatefile = None
 
     def add_canvas(self):
         self.widget2 = QtWidgets.QWidget(self.centralwidget)
@@ -100,19 +100,23 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         test_dir = "test"
         self._wd = test_dir
         self._arcfile = os.path.join(self._wd, "lamp-202403140107_SPECSLAMP_FeAr_slit16s_G10_E9.z")
+        self._wd = '../bfoscE9G10/template'
+        self._arcfile = os.path.join(self._wd, "template_from_202305220046.dump")
         self._linelistfile = '../arc_linelist/FeAr.dat'
         self.lineEdit_arc.setText(self._arcfile)
         self.lineEdit_linelist.setText(self._linelistfile)
         self._read_linelist(self._linelistfile)
         tablename = os.path.join(self._wd, "TABLE", "table_linelist.csv")
         tablename = self._arcfile
-        self._read_arc(self._arcfile, tablename=tablename)
+        self._read_arc(self._arcfile, tablename=None)
+        self._get_tab_line_order()
         #self._read_arc(self._arcfile, tablename=self._arcfile)
         #self._arcfile = joblib.load(os.path.join(self._wd, "lamp-blue0062.fits_for_blue0060.fits.dump"))
 
     def initUi(self):
         self.toolButton_load_arc.clicked.connect(self._select_arc)
         self.toolButton_load_linelist.clicked.connect(self._select_linelist)
+        self.toolButton_load_template.clicked.connect(self._select_template)
         self.lineEdit_arc.textChanged.connect(self._get_tab_line_order)
         self.tableWidget_files.itemSelectionChanged.connect(self._draw_scatter_pos)
         self.pushButton_upper_order.clicked.connect(self._upper_order)
@@ -147,7 +151,26 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.lineEdit_arc.setText(fileName)
         self._arcfile = fileName
         self._read_arc(fileName)
+        self._get_tab_line_order()
         print(f"arc loaded: {os.path.basename(fileName)}")
+
+
+    def _select_template(self):
+        filename, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Open arc", "dump files (*.dump)")
+        self.lineEdit_template.setText(filename)
+        self.templatefile = filename
+        basename = os.path.basename(filename)
+        if ('.dump' in basename) or ('.z' in basename):
+            data = joblib.load(filename)
+            try:
+                waves_template, fluxes_template = data['wave_solu'], data['flux_arc']
+            except:
+                waves_template, fluxes_template = data['wave'], data['flux']
+        if ('.fits' in basename) or ('csv' in basename):
+            data = Table.read(filename)
+            waves_template, fluxes_template = data['wave'], data['flux']
+        self.waves_template = waves_template
+        self.fluxes_template = fluxes_template
 
     def _read_arc(self, fileName, tablename=None, wave_init=None, wave_solu =None):
         '''
@@ -157,11 +180,21 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         table [str]: file name of the found emission lines table
                   that must include 'order', 'xcoord', 'line', 'Fpeak','good',  'wv_fit'
         '''
-        self.arcdic = joblib.load(fileName)
+        ext = os.path.splitext(fileName)[1]
+        print(f'arcname = {fileName}')
+        if (ext == '.dump') or (ext == '.z'):
+            self.arcdic = joblib.load(fileName)
+        elif (ext == '.fits') or (ext=='.csv'):
+            data = Table.read(fileNmae)
+            arcdic = {'flux' : np.array(data['flux'])}
+            self.arcdic = arcdic
         try:
             flux = self.arcdic['flux_arc']
         except:
-            flux = self.arcdic['spec_extr']
+            try:
+                flux = self.arcdic['spec_extr']
+            except:
+                flux = self.arcdic['flux']
         shape  = flux.shape
         try:
             wave_init = np.array(self.arcdic['wave_init']) if wave_init is None else wave_init
@@ -647,7 +680,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             Fitter = Polyfitdic[Fittername]
             Polyfunc = Fitter(x[indselect], z[indselect], deg=xdeg, pw=2, robust=False)
             wv_fit = Polyfunc.predict(x)
-            wave_solu = np.array([Polyfuncse.predict(self.xindex)])
+            wave_solu = np.array([Polyfunc.predict(self.xindex)])
         elif Fittername == 'Poly2DFitter':
             Fitter = Polyfitdic[Fittername]
             deg = (xdeg, ydeg)
@@ -684,13 +717,16 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.savedata['wave_solu'] = self.wave_solus
         self.savedata['tab_lines'] = self.tab_line_all
         self.savedata['nlines'] = np.sum(self.tab_line_all['maskgood'])
-        self.savedata['deg'] = (self.fit_deg, 'The degree of the 1D polynomial')
+        self.savedata['deg'] = (self.fit_deg, 'The degree of the 1or2D polynomial')
+        if slef.autofind_bool:
+            self.savedata['wave_int'] = self.waves_init
         tab = self.tab_line_all
         ind = tab['maskgood'] == 1
         rms = np.std(tab[ind]['wv_fit'] - tab[ind]['line'])
         self.savedata['rms'] = rms
         basename = os.path.basename(self._arcfile)
-        name = basename.replace('.dump', '') if '.dump' in basename else basename
+        name = os.path.splitext(basename)[0]
+        #name = basename.replace('.dump', '') if '.dump' in basename else basename
         fname = os.path.join(self._wd, f'{name}.z')
         print(f'rms = {rms}')
         joblib.dump(self.savedata, fname)
@@ -702,20 +738,67 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         fname = os.path.join(self._wd, f'arc_template_spec.z')
         joblib.dump(templatedic, fname)
 
-    def _autofind(self, wave_init: np.array = None, flux: np.array = None, ccf_kernel_width=1.5):
+    def _autofind(self, waves_init: np.array = None, fluxes: np.array = None, ccf_kernel_width=1.5):
         '''
         automaticlly find lines by using CCF
         npix_chunk : int, optional
         the chunk length (half). The default is 20.
         ccf_kernel_width: float, the default is 1.5
         '''
-        if wave_init is None: wave_init = self.wave_solus
-        if flux is None: flux = self.fluxes
+        from pyexspec.wavecalibrate.findlines import findline, find_lines
+        if fluxes is None: fluxes = self.fluxes
+        find_line = findline()
+        if self.templatefile is not None:
+            waves_template, fluxes_template = self.waves_template, self.fluxes_template
+            waves_init = np.zeros_like(fluxes)
+            xcoord = np.arange(fluxes.shape[1])
+            x_template = np.arange(fluxes_template.shape[1])
+            for _order, flux in enumerate(fluxes):
+                flux_template = fluxes_template[_order]
+                wave_template = waves_template[_order]
+                shifts, ccf = find_line.calCCF(xcoord, flux, x_template, flux_template, show=False)
+                wave_init = find_line.estimate_wave_init(xcoord, find_line.xshift, x_template, wave_template)
+                waves_init[_order] = wave_init
+        if waves_init is None: waves_init = self.wave_solus
         try: npix_chunk = int(self.lineEdit_npix_chunk.text())
-        except: npix_chunk = 20
-        try: ccf_kernel_width = int(self.lineEdit_ccf_kernel_width.text())
-        except: ccf_kernel_width = 20
-        tab_lines = find_lines(wave_init, flux, self.linelist, npix_chunk=npix_chunk, ccf_kernel_width=ccf_kernel_width)
+        except:
+            npix_chunk = 20
+            print(f'  |-Using the default chunk pixels, npix_chunk = {npix_chunk}')
+        try: ccf_kernel_width = np.float64(self.lineEdit_ccf_kernel_width.text())
+        except:
+            ccf_kernel_width = 1.5
+            print(f'  |-Using the default width of ccf kernel, ccf_kernel_width = {ccf_kernel_width}')
+        try: num_sigma_clip = np.float64(self.lineEdit_num_sigma_clip.text())
+        except:
+            num_sigma_clip = 0
+            print(f'  |-Using the default number of simga clipping (Num*std), num_sigma_clip = {num_sigma_clip}')
+        print(f'  |-npix_chunk = {npix_chunk}; ccf_kernel_width = {ccf_kernel_width}; num_sigma_clip = {num_sigma_clip}')
+        self.waves_init = waves_init
+        tab_auto_lines = find_lines(waves_init, fluxes, self.linelist, npix_chunk=npix_chunk,
+                        ccf_kernel_width=ccf_kernel_width, num_sigma_clip=num_sigma_clip)
+        tab_maskgood = Table(data=[np.ones(len(tab_auto_lines))], names=['maskgood'])
+        tab = hstack([tab_auto_lines, tab_maskgood])
+        colnames_old = ['line_x_ccf', 'line_wave_init_ccf', 'line_peakflux']
+        colnames_new = ['xcoord', 'wv_fit', 'Fpeak']
+        for _i, colname in enumerate(colnames_old):
+            if colname in tab.colnames:
+                tab.rename_column(colname, colnames_new[_i])
+        colnames = tab.colnames
+        def change_columorder(colnames,_i, name):
+            colnames1 = colnames.copy()
+            ind = np.where(np.array(colnames)==name)[0][0]
+            name_orig = colnames1[_i]
+            colnames[_i] = name; colnames[ind] = name_orig
+            return colnames
+        for _i, _name in enumerate(['order', 'xcoord', 'line', 'maskgood', 'wv_fit', 'Fpeak' ]):
+            colnames = change_columorder(colnames, _i, _name)
+        tab = tab[colnames]
+        tables = self._split_tab_line_all(tab_line_all=tab)
+        self.tab_line_all = vstack(tables)
+        self.colnames = tables[0].colnames
+        self.tables = tables
+        self.tab_auto_lines = tab_auto_lines
+        self.autofind_bool = True
 
 
 class fitWindow(QtWidgets.QWidget):
@@ -799,6 +882,8 @@ class fitWindow(QtWidgets.QWidget):
         maskgood = np.array(table['maskgood'], dtype=bool)
         ax.scatter(x[maskgood], y[maskgood], marker='+', lw=1, color='b', label='Good')
         #ax.scatter(x[~maskgood], y[~maskgood], marker='x', lw=1, color='r', label='Bad')
+        rms = np.std(y[maskgood])
+        ax.text(0.75, 0.9, f'rms={rms:.5f}', transform=ax.transAxes, fontsize=13)
         ax.axhline(y=0, lw=0.8, ls='--', color='k')
         ax.set_ylabel(r'Res. (${\rm \AA}$)')
         ax.set_xlabel('Pixel')

@@ -81,7 +81,7 @@ class iospec2d():
             try:
                 readnoise = hdu[ihdu].header['RON']
             except:
-                readnoise = hdu[ihdu].header['RONOISE']
+                readnoise = hdu[ihdu].header['RDNOISE']
         hdu.close()
         gain = np.float64(gain)
         readnoise = np.float64(readnoise)

@@ -37,4 +37,9 @@ Authors:
 -  `cd wvcalib`
 - `$python wvclib_app.py`
 - - when set value of emission line, you shoud press "Enter/Return" keyboard after input the value into the table.
+- - Finding the emission line automatically:
+- - - BFOSC E9G10
+- - - - npix_chunck = 8; CCF_Kernel Width = 1.5; num_sigma_clip = 3
+- - - - Fitting Function: Poly2DFitter; Parameter : deg(X) = 4; deg(Y) = 6 
+
 

@@ -21,14 +21,14 @@ class WvClibWindow(object):
         MainWindow.resize(1300, 615)
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
-        ## arc button
+        ## arc button for loading arc lamp file
         self.toolButton_load_arc = QtWidgets.QToolButton(self.centralwidget)
         self.toolButton_load_arc.setGeometry(QtCore.QRect(10, 20, 80, 22))
         self.toolButton_load_arc.setObjectName("toolButton_load_arc")
         self.lineEdit_arc = QtWidgets.QLineEdit(self.centralwidget)
         self.lineEdit_arc.setGeometry(QtCore.QRect(90, 20, 360, 21))
         self.lineEdit_arc.setObjectName("lineEdit_arc")
-        ## linelist button
+        ## linelist button for loading linelist file
         self.toolButton_load_linelist = QtWidgets.QToolButton(self.centralwidget)
         self.toolButton_load_linelist.setGeometry(QtCore.QRect(10, 45, 80, 22))
         self.toolButton_load_linelist.setObjectName("toolButton_load_linelist")
@@ -169,10 +169,23 @@ class WvClibWindow(object):
         self.lineEdit_npix_chunk.setPlaceholderText('npix_chunk')
         self.lineEdit_npix_chunk.setEnabled(True)
         self.lineEdit_npix_chunk.setGeometry(QtCore.QRect(466, 569 ,130, 21))
-        self.lineEdit_x_window = QtWidgets.QLineEdit(self.centralwidget)
-        self.lineEdit_x_window.setPlaceholderText('CCF Kernel Width')
-        self.lineEdit_x_window.setEnabled(True)
-        self.lineEdit_x_window.setGeometry(QtCore.QRect(466, 590, 130, 21))
+        ##--the width of ccf kernel 
+        self.lineEdit_ccf_kernel_width = QtWidgets.QLineEdit(self.centralwidget)
+        self.lineEdit_ccf_kernel_width.setPlaceholderText('CCF Kernel Width')
+        self.lineEdit_ccf_kernel_width.setEnabled(True)
+        self.lineEdit_ccf_kernel_width.setGeometry(QtCore.QRect(466, 590, 130, 21))
+        ##--the number of sigma clipping (float)   num_sigma_clip
+        self.lineEdit_num_sigma_clip = QtWidgets.QLineEdit(self.centralwidget)
+        self.lineEdit_num_sigma_clip.setPlaceholderText('num_sigma_clip')
+        self.lineEdit_num_sigma_clip.setEnabled(True)
+        self.lineEdit_num_sigma_clip.setGeometry(QtCore.QRect(466, 611, 130, 21))
+        ##-- Template button for loading template lamp file
+        self.toolButton_load_template = QtWidgets.QToolButton(self.centralwidget)
+        self.toolButton_load_template.setGeometry(QtCore.QRect(466, 636, 90, 22))
+        self.toolButton_load_template.setObjectName("toolButton_load_template")
+        self.lineEdit_template = QtWidgets.QLineEdit(self.centralwidget)
+        self.lineEdit_template.setGeometry(QtCore.QRect(567, 636, 360, 21))
+        self.lineEdit_template.setObjectName("lineEdit_template")
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
@@ -192,3 +205,4 @@ class WvClibWindow(object):
         self.toolButton_load_arc.setText(_translate("MainWindow", "ARC..."))
         self.toolButton_load_linelist.setText(_translate("MainWindow", "LINELIST..."))
         self.pushButton_autofind.setText(_translate("MainWindow", "atuo-find lines"))
+        self.toolButton_load_template.setText(_translate("MainWindow", "Template..."))
