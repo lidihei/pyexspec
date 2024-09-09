@@ -26,7 +26,7 @@ class longslit(findline):
         self.flux_pypiet = hdu[4].data[:, 0]
         self.x_pypiet = np.arange(len(self.wave_pypiet))
 
-    def find_lines(self, wave_init: np.array = None, flux: np.array = None, npix_chunk=8, ccf_kernel_width=1.5):
+    def find_lines(self, wave_init: np.array = None, flux: np.array = None, npix_chunk=8, ccf_kernel_width=1.5, num_sigma_clip=0.):
         '''
         find the index of the emission lines of the arc lamp spectrum, detials see. twodspec.thar.fine_lines
         returns:
@@ -39,7 +39,7 @@ class longslit(findline):
         if len(wave_init.shape) ==1:
             wave_init = np.array([wave_init])
             flux = np.array([flux])
-        tab_lines = find_lines(wave_init, flux, self.linelist, npix_chunk=npix_chunk, ccf_kernel_width=ccf_kernel_width)
+        tab_lines = find_lines(wave_init, flux, self.linelist, npix_chunk=npix_chunk, ccf_kernel_width=ccf_kernel_width, num_sigma_clip=num_sigma_clip)
         return tab_lines
 
     def estimate_wave_init(self, x: np.array = None, xshift: float=None,

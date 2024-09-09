@@ -426,6 +426,7 @@ def find_lines(wave_init, arc_obs, arc_line_list, npix_chunk=20, ccf_kernel_widt
                 #else:
                 tlines.append(this_result)
     tlines = table.Table(tlines)
+    #print(tlines)
     print("  |-find_lines: {}/{} lines using GF / CCF!".format(
         np.sum(np.isfinite(tlines["line_x_gf"])),
         np.sum(np.isfinite(tlines["line_x_ccf"]))

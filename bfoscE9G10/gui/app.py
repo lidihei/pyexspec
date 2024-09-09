@@ -81,7 +81,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         # the number of pixel of in the direction of dispersion (the number of pixel of wavelength)
         if nwv is None: self.nwv = self.trimdy
         self.ap_trace = np.zeros((0, self.nwv), dtype=int)
-        self._lamp = None
+        self._lamp_template = None
         self.aperture_image = None
         self. wavecalibrate =  wavecalibrate
         # UI
@@ -128,7 +128,9 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         test_dir = "/Users/lijiao/Documents/works/Feige89/data/216cm/20240314_bfosc_liuzhicun/E9G10"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
-        self._lamp = joblib.load("../template/fear_model_order2_12.dump")
+        lamp_template = "../template/fear_model_order2_12_from202403140107.dump"
+        self._lamp_template = joblib.load(lamp_template)
+        self.lineEdit_lamp.setText(lamp_template)
         apfname = f'{self._wd}/ap.dump'
         #print(apfname)
         self.ap = joblib.load(apfname)
@@ -159,7 +161,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         fileName,_ = QtWidgets.QFileDialog.getOpenFileName(self, "Open LAMP", "dump files (*.dump)")
         print(fileName)
         self.lineEdit_lamp.setText(fileName)
-        self._lamp = joblib.load(fileName)
+        self._lamp_template = joblib.load(fileName)
         print("The Template Spectrum of Arc Lamp is loaded!")
 
     def _set_wd(self):
@@ -698,7 +700,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         #ap_star = self.ap
         star_err_squared = self.image_err_squared
         bg = self.ap.backgroundnew(star, longslit = False,q=(40, 40), npix_inter=7, sigma=(20, 20), kernel_size=(21, 21),
-                                   Napw_bg=self.Napw_bg, deg=bg_deg, num_sigclip=5, Napw=self.Napw, verbose=False)
+                                   Napw_bg=self.Napw_bg, num_sigclip=5, Napw=self.Napw, verbose=False)
         self._draw_aperture()
         star_withbg = star.copy()
         star_withbg_err_squared =star_err_squared.copy()
@@ -729,7 +731,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         #star1d = self.ap.extract_all(star, gain=gain, ron=ron, n_jobs=1, verbose=False)
         ##### extract with background
         n_jobs =1
-        star1d_withbg = extract_all(star_withbg, self.ap, im_err_squared = star_withbg_err_squared, n_chunks=8,
+        star1d_withbg = extract_all(star_withbg/self.sensitivity, self.ap, im_err_squared = star_withbg_err_squared, n_chunks=8,
                 ap_width=self.ap.ap_width, profile_oversample=10, profile_smoothness=1e-2,
                 num_sigma_clipping=5., gain=gain, ron=ron, n_jobs=n_jobs)
         star1d_withbg_divide_flat = extract_all(star_withbg_divide_flat, self.ap,
@@ -737,7 +739,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
                 ap_width=self.ap.ap_width, profile_oversample=10, profile_smoothness=1e-2,
                 num_sigma_clipping=5., gain=gain, ron=ron, n_jobs=n_jobs)
         ##### extract image - background
-        star1d = extract_all(star, self.ap, im_err_squared = star_err_squared, n_chunks=8,
+        star1d = extract_all(star/self.sensitivity, self.ap, im_err_squared = star_err_squared, n_chunks=8,
                 ap_width=self.ap.ap_width, profile_oversample=10, profile_smoothness=1e-2,
                 num_sigma_clipping=5., gain=gain, ron=ron, n_jobs=n_jobs)
         star1d_divide_flat = extract_all(star_divide_flat, self.ap,
@@ -815,8 +817,8 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
 
 
     def _proc_all(self, show=False, irow=1000):
-        if self._lamp is None:
-            print("LAMP not loaded!")
+        if self._lamp_template is None:
+            print("  |-- LAMP teamplate is not loaded!")
         nrow, ncol = self.master_flat.shape
         wavecalibrate = self.wavecalibrate
         #flat_bg = self.ap.background(self.master_flat, q=(40, 40), npix_inter=7, sigma=(20, 20), kernel_size=(15, 15))
@@ -988,6 +990,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
     def _proc_lamp(self, fp, ap_star, num_sigclip=2.5,
                   line_peakflux=50,line_type = 'line_x_ccf',
                   verbose=False, wavecalibrate=True, deg=4, show=False,
+                  degxy = (4, 6),
                   min_select_lines = 10,
                   QA_fig_path = None, suffix=None):
         """ read lamp
@@ -1020,11 +1023,13 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
             checkBox_autowvcalib_state = self.checkBox_autowvcalib.checkState().value
         wavecalibrate = False if checkBox_autowvcalib_state == 0 else True
         if wavecalibrate:
+            from twodspec import thar
             from pyexspec.wavecalibrate import wclongslit
-            wave_calibrate = wclongslit.longslit(wave_template =None, flux_template=None, linelist =  self._lamp["linelist"])
+            from pyexspec.wavecalibrate import findlines
+            wave_calibrate = wclongslit.longslit(wave_template =None, flux_template=None, linelist =  self._lamp_template["linelist"])
             xshifts = []
-            wave_init = []
-            wave_solu = []
+            waves_init = np.zeros_like(lamp1d)
+            waves_solu = []
             pf1 = []
             rms = []
             tab_lines = []
@@ -1035,63 +1040,65 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
                os.makedirs(QA_fig_path)
             suffix = '' if suffix is None else suffix
             for _i, _flux in enumerate(lamp1d):
-                _flux = _flux[::-1]
                 xcoord = np.arange(len(_flux))
-                wave_template = self._lamp["wave"][_i][::-1]
-                flux_template = self._lamp["flux"][_i][::-1]
+                wave_template = self._lamp_template["wave"][_i]
+                flux_template = self._lamp_template["flux"][_i]
                 x_template = np.arange(len(wave_template))
-                #dic = {'lamp1d': lamp1d,
-                #   'xcoord': xcoord,
-                #   '_flux': _flux,
-                #   'wave_template': wave_template,
-                #   'flux_template': flux_template,
-                #   'x_template':x_template,
-                #   'linelist':self._lamp["linelist"]
-                #  }
-                #joblib.dump(dic, 'dic.z')
                 _xshift = wave_calibrate.get_xshift(xcoord, _flux, x_template=x_template, flux_template = flux_template,show=show)
-                print(f'  |-xshift = {_xshift}  pixel')
+                print(f'    |--order {_i} xshift = {_xshift}  pixel')
                 _wave_init = wave_calibrate.estimate_wave_init(xcoord, xshift=_xshift, x_template=x_template, wave_template = wave_template,
                                                             deg=deg, nsigma=num_sigclip, min_select=min_select_lines, verbose=False)
-                _tab = wave_calibrate.find_lines(wave_init=_wave_init, flux=_flux, npix_chunk=8, ccf_kernel_width=2)
-                _wave_solu = wave_calibrate.calibrate(xcoord, _tab, flux=_flux, deg=deg, num_sigclip=num_sigclip,
-                                              line_peakflux=line_peakflux, line_type=line_type ,min_select_lines=min_select_lines, show=show)
-                _tab_lines = wave_calibrate.tab_lines.copy()
-                _tab_lines['order'] = _i
-                xshifts.append(-_xshift)
-                wave_init.append(_wave_init[::-1])
-                wave_solu.append(_wave_solu[::-1])
-                #pf1.append(wave_calibrate.pf1)
-                rms.append(wave_calibrate.rms)
-                tab_lines.append(_tab_lines)
-                _mpflux = np.median(_tab_lines["line_peakflux"][_tab_lines['indselect']])
-                mpflux.append(_mpflux)
-                fig_init_solu, axs = plt.subplots(1, 1, figsize=(7, 4))
-                #plt.subplots_adjust(hspace=0)
-                plt.plot(wave_template, flux_template/np.median(flux_template),lw=1, color='b', label='template')
-                plt.plot(_wave_init, _flux/np.median( _flux), lw=1, color='r', label='init')
-                plt.plot(_wave_solu, _flux/np.median( _flux), lw=1, label='solution', color='k')
-                plt.legend()
-                plt.xlabel(r'Wavelength ${\rm \AA}$')
-                plt.ylabel(r'Counts')
-                ####------------ save figure
-                fname_fig_QA_ccf= os.path.join(QA_fig_path, f'{lampbasename}_QA_ccf{_i:03d}{suffix}.pdf')
-                wave_calibrate.fig_QA_ccf.savefig(fname_fig_QA_ccf)
-                plt.close(wave_calibrate.fig_QA_ccf)
-                ##--------------
-                fname_fig_wave_calibrate= os.path.join(QA_fig_path, f'{lampbasename}_wave_calibrate{_i:03d}{suffix}.pdf')
-                wave_calibrate.fig_QA_wave_calibrate.savefig(fname_fig_wave_calibrate)
-                plt.close(wave_calibrate.fig_QA_wave_calibrate)
-                ##-------------
-                fname_fig_init_solu= os.path.join(QA_fig_path, f'{lampbasename}_init_solu{_i:03d}{suffix}.pdf')
-                fig_init_solu.savefig(fname_fig_init_solu)
-                plt.close(fig_init_solu)
-            _tab = vstack(tab_lines)
-            nlines = np.sum(_tab['indselect'])
-        else:
-            pf1 = None; rms =np.nan; mpflux=None; nlines=None
-            wave_solu = np.nan; wave_init = np.nan; tab_lines= None
+                waves_init[_i] = _wave_init
+            tab_lines = findlines.find_lines(waves_init, lamp1d, self._lamp_template["linelist"], npix_chunk=8, ccf_kernel_width=1.5, num_sigma_clip=1)
+            ind_good = np.isfinite(tab_lines["line_x_ccf"]) & (np.abs(tab_lines["line_x_ccf"] - tab_lines["line_x_init"]) < 10) & (
+                (tab_lines["line_peakflux"] - tab_lines["line_base"]) > 100) & (
+                           np.abs(tab_lines["line_wave_init_ccf"] - tab_lines["line"]) < 3)
+            tab_lines.add_column(table.Column(ind_good, "ind_good"))
+            from pyexspec.fitfunc.polynomial import Poly1DFitter
+            def clean(pw=1, deg=2, threshold=0.1, min_select=10):
+                order = tlines["order"].data
+                ind_good = tlines["ind_good"].data
+                linex = tlines["line_x_ccf"].data
+                z = tlines["line"].data
 
+                u_order = np.unique(order)
+                for _u_order in u_order:
+                    ind = (order == _u_order) & ind_good
+                    if np.sum(ind) > min_select:
+                        # in case some orders have only a few lines
+                        p1f = Poly1DFitter(linex[ind], z[ind], deg=deg, pw=pw)
+                        res = z[ind] - p1f.predict(linex[ind])
+                        ind_good[ind] &= np.abs(res) < threshold
+                tlines["ind_good"] = ind_good
+                return
+
+            tlines = tab_lines.copy()
+            print("  |- {} lines left".format(np.sum(tlines["ind_good"])))
+            clean(pw=1, deg=2, threshold=0.8, min_select=20)
+            clean(pw=1, deg=2, threshold=0.4, min_select=20)
+            clean(pw=1, deg=2, threshold=0.2, min_select=20)
+            print("  |- {} lines left".format(np.sum(tlines["ind_good"])))
+            tab_lines["ind_good"] = tlines["ind_good"].copy()
+            tlines = tlines[tlines["ind_good"]] 
+            ### fitting grating equation
+            x = tlines["line_x_ccf"]
+            y = tlines["order"]
+            z = tlines["line"]
+            pf1, pf2, indselect = thar.grating_equation(
+                                  x, y, z, deg=degxy, nsigma=num_sigclip, min_select=210, verbose=10)
+            tlines.add_column(table.Column(indselect, "indselect"))
+            print(f'###----------------\npf2.rms = {pf2.rms}\n###------------------')
+            rms = pf2.rms
+            nx, norder = lamp1d.shape
+            mx, morder = np.meshgrid(np.arange(norder), np.arange(nx))
+            wave_solu = pf2.predict(mx, morder)
+            _tab = vstack(tab_lines)
+            tab_lines = tlines
+            nlines = np.sum(tlines['indselect'])
+            wave_init = waves_init
+        else:
+            pf1 = None; rms =np.nan; nlines=None
+            wave_solu = np.nan; wave_init = np.nan; tab_lines= None
         header = self._modify_header(fp)
         try:
             isot =  f'{header["UTSHUT"]}'
@@ -1115,7 +1122,8 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
             rms=rms,
             #pf1=pf1,
             deg=(deg, 'The degree of the 1D polynomial'),
-            meidan_peak_flux=mpflux,
+            degxy=(degxy, 'The degree of the 2D polynomial'),
+            #meidan_peak_flux=mpflux,
             # lamp=lamp,
             flux_arc=lamp1d,
             blaze = self.blaze,
