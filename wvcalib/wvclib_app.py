@@ -303,9 +303,13 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
 
     def _make_datatable(self):
         iorder = self.order
-        tab_line_order =  self.tables[iorder]
-        #datatable.sort('xcoord')
-        self.tab_line_order = tab_line_order
+        try:
+            tab_line_order =  self.tables[iorder]
+            #datatable.sort('xcoord')
+            self.tab_line_order = tab_line_order
+        except:
+            self.tab_line_order = None
+            print("@_make_datatable: 'UiWvcalib' object has no attribute 'tables'")
         self.color_list = [[255, 255, 255],
                            [211, 211, 211]]
         #                   [255, 182, 193],
