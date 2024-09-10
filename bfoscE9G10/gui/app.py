@@ -773,6 +773,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         star1d['wave_init'] = arcdic['wave_init']
         star1d['wave_solu'] = arcdic['wave_solu']
         star1d['rms_wave_calibrate'] =arcdic['rms']
+        star1d['flux_arc'] =arcdic['flux_arc']
         star1d['median_flat'] =self.median_master_flat
         #star1d["header"] = header
         #self.star1d_divide_flat = star1d_divide_flat
@@ -934,59 +935,6 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         )
         return result
 
-    def grating_equation(self, x, z, deg=4, nsigma=3, min_select=None, verbose=True):
-        """
-        Fit a grating equation (1D polynomial function) to data 
-        Parameters
-        ----------
-        x : array
-            x coordinates of emission lines
-        z : array
-            The true wavelengths of lines.
-        deg : tuple, optional
-            The degree of the 1D polynomial. The default is (4, 10).
-        nsigma : float, optional
-            The data outside of the nsigma*sigma radius is rejected iteratively. The default is 3.
-        min_select : int or None, optional
-            The minimal number of selected lines. The default is None.
-        verbose :
-            if True, print info
-
-        Returns
-        -------
-        pf1, indselect
-
-        """
-        from twodspec.polynomial import Poly1DFitter
-        indselect = np.ones_like(x, dtype=bool)
-        iiter = 0
-        # pf1
-        while True:
-            pf1 = Poly1DFitter(x[indselect], z[indselect], deg=deg, pw=1, robust=False)
-            z_pred = pf1.predict(x)
-            z_res = z_pred - z
-            sigma = np.std(z_res[indselect])
-            indreject = np.abs(z_res[indselect]) > nsigma * sigma
-            n_reject = np.sum(indreject)
-            if n_reject == 0:
-                # no lines to kick
-                break
-            elif isinstance(min_select, int) and min_select >= 0 and np.sum(indselect) <= min_select:
-                # selected lines reach the threshold
-                break
-            else:
-                # continue to reject lines
-                indselect &= np.abs(z_res) < nsigma * sigma
-                iiter += 1
-            if verbose:
-                print("@grating_equation: iter-{} \t{} lines kicked, {} lines left, rms={:.5f} A".format(
-                    iiter, n_reject, np.sum(indselect), sigma))
-        pf1.rms = sigma
-
-        if verbose:
-            print("@grating_equation: {} iterations, rms = {:.5f} A".format(iiter, pf1.rms))
-        return pf1, indselect
-
     def _proc_lamp(self, fp, ap_star, num_sigclip=2.5,
                   line_peakflux=50,line_type = 'line_x_ccf',
                   verbose=False, wavecalibrate=True, deg=4, show=False,
@@ -1047,7 +995,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
                 _xshift = wave_calibrate.get_xshift(xcoord, _flux, x_template=x_template, flux_template = flux_template,show=show)
                 print(f'    |--order {_i} xshift = {_xshift}  pixel')
                 _wave_init = wave_calibrate.estimate_wave_init(xcoord, xshift=_xshift, x_template=x_template, wave_template = wave_template,
-                                                            deg=deg, nsigma=num_sigclip, min_select=min_select_lines, verbose=False)
+                                                          deg=deg, nsigma=num_sigclip, min_select=min_select_lines, verbose=False)
                 waves_init[_i] = _wave_init
             tab_lines = findlines.find_lines(waves_init, lamp1d, self._lamp_template["linelist"], npix_chunk=8, ccf_kernel_width=1.5, num_sigma_clip=1)
             ind_good = np.isfinite(tab_lines["line_x_ccf"]) & (np.abs(tab_lines["line_x_ccf"] - tab_lines["line_x_init"]) < 10) & (
@@ -1055,6 +1003,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
                            np.abs(tab_lines["line_wave_init_ccf"] - tab_lines["line"]) < 3)
             tab_lines.add_column(table.Column(ind_good, "ind_good"))
             from pyexspec.fitfunc.polynomial import Poly1DFitter
+            from pyexspec.wavecalibrate.findlines import grating_equation2D
             def clean(pw=1, deg=2, threshold=0.1, min_select=10):
                 order = tlines["order"].data
                 ind_good = tlines["ind_good"].data
@@ -1079,15 +1028,14 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
             clean(pw=1, deg=2, threshold=0.2, min_select=20)
             print("  |- {} lines left".format(np.sum(tlines["ind_good"])))
             tab_lines["ind_good"] = tlines["ind_good"].copy()
-            tlines = tlines[tlines["ind_good"]] 
+            tlines = tlines[tlines["ind_good"]]
             ### fitting grating equation
             x = tlines["line_x_ccf"]
             y = tlines["order"]
             z = tlines["line"]
-            pf1, pf2, indselect = thar.grating_equation(
+            pf1, pf2, indselect = grating_equation2D(
                                   x, y, z, deg=degxy, nsigma=num_sigclip, min_select=210, verbose=10)
             tlines.add_column(table.Column(indselect, "indselect"))
-            print(f'###----------------\npf2.rms = {pf2.rms}\n###------------------')
             rms = pf2.rms
             nx, norder = lamp1d.shape
             mx, morder = np.meshgrid(np.arange(norder), np.arange(nx))
@@ -1105,7 +1053,7 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         except:isot =  f'{header["DATE-OBS"]}'
         jd = Time(isot, format='isot').jd
         if wavecalibrate is False:
-           print("!!! The wavelenth of this ARC LAMP is not calibrated")
+           print("  |- !!! The wavelenth of this ARC LAMP is not calibrated")
         nx, norder = lamp1d.shape
         mx, morder = np.meshgrid(np.arange(norder), np.arange(nx))
         # result

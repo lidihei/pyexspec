@@ -21,7 +21,7 @@ from scipy.optimize import minimize
 from scipy.fftpack import fft
 from scipy.fftpack import ifft
 from pyexspec.fitfunc.function import gaussian_linear_func
-from pyexspec.fitfunc import Poly1DFitter
+from pyexspec.fitfunc import Poly1DFitter, Poly2DFitter
 from scipy import stats
 
 
@@ -104,58 +104,63 @@ class findline():
         self.wave_init = wave_init
         return wave_init
 
-    def grating_equation(self, x, z, deg=4, nsigma=3, min_select=None, verbose=True, **argwords):
-        """
-        Fit a grating equation (1D polynomial function) to data
-        Parameters
-        ----------
-        x : array
-            x coordinates of emission lines
-        z : array
-            The true wavelengths of lines.
-        deg : tuple, optional
-            The degree of the 1D polynomial. The default is (4, 10).
-        nsigma : float, optional
-            The data outside of the nsigma*sigma radius is rejected iteratively. The default is 3.
-        min_select : int or None, optional
-            The minimal number of selected lines. The default is None.
-        verbose :
-            if True, print info
+def grating_equation2D(x, y, z, deg=(4, 10), nsigma=3, min_select=None, verbose=True):
+    """
+    Fit a grating equation (2D polynomial function) to data
 
-        Returns
-        -------
-        pf1, indselect
+    Parameters
+    ----------
+    x : array
+        x coordinates of emission lines
+    y : array
+        order number.
+    z : array
+        The true wavelengths of lines.
+    deg : tuple, optional
+        The degree of the 2D polynomial. The default is (4, 10).
+    nsigma : float, optional
+        The data outside of the nsigma*sigma radius is rejected iteratively. The default is 3.
+    min_select : int or None, optional
+        The minimal number of selected lines. The default is None.
+    verbose :
+        if True, print info
 
-        """
-        indselect = np.ones_like(x, dtype=bool)
-        iiter = 0
-        # pf1
-        while True:
-            pf1 = Poly1DFitter(x[indselect], z[indselect], deg=deg, pw=1, robust=False)
-            z_pred = pf1.predict(x)
-            z_res = z_pred - z
-            sigma = np.std(z_res[indselect])
-            indreject = np.abs(z_res[indselect]) > nsigma * sigma
-            n_reject = np.sum(indreject)
-            if n_reject == 0:
-                # no lines to kick
-                break
-            elif isinstance(min_select, int) and min_select >= 0 and np.sum(indselect) <= min_select:
-                # selected lines reach the threshold
-                break
-            else:
-                # continue to reject lines
-                indselect &= np.abs(z_res) < nsigma * sigma
-                iiter += 1
-            if verbose:
-                print("  |-@grating_equation: iter-{} \t{} lines kicked, {} lines left, rms={:.5f} A".format(
-                    iiter, n_reject, np.sum(indselect), sigma))
-        pf1.rms = sigma
+    Returns
+    -------
+    pf1, pf2, indselect
 
+    """
+    indselect = np.ones_like(x, dtype=bool)
+    iiter = 0
+    # pf1
+    while True:
+        pf1 = Poly2DFitter(x[indselect], y[indselect], z[indselect], deg=deg, pw=1, robust=False)
+        z_pred = pf1.predict(x, y)
+        z_res = z_pred - z
+        sigma = np.std(z_res[indselect])
+        indreject = np.abs(z_res[indselect]) > nsigma * sigma
+        n_reject = np.sum(indreject)
+        if n_reject == 0:
+            # no lines to kick
+            break
+        elif isinstance(min_select, int) and min_select >= 0 and np.sum(indselect) <= min_select:
+            # selected lines reach the threshold
+            break
+        else:
+            # continue to reject lines
+            indselect &= np.abs(z_res) < nsigma * sigma
+            iiter += 1
         if verbose:
-            print("  |-@grating_equation: {} iterations, rms = {:.5f} A".format(iiter, pf1.rms))
-        return pf1, indselect
+            print("  |- @grating_equation: iter-{} \t{} lines kicked, {} lines left, rms={:.5f} A".format(
+                iiter, n_reject, np.sum(indselect), sigma))
+    pf1.rms = sigma
 
+    # pf2
+    pf2 = Poly2DFitter(x[indselect], y[indselect], z[indselect], deg=deg, pw=2, robust=False)
+    pf2.rms = np.std(pf2.predict(x[indselect], y[indselect]) - z[indselect])
+    if verbose:
+        print("  |- @grating_equation: {} iterations, pf1.rms ={:.5f}, pf2.rms ={:.5f} A".format(iiter, pf1.rms, pf2.rms))
+    return pf1, pf2, indselect
 
 
 def corr_arc(wave_temp, arc_temp, arc_obs, maxshift=100):
@@ -346,7 +351,7 @@ def find_lines(wave_init, arc_obs, arc_line_list, npix_chunk=20, ccf_kernel_widt
         this_arc_meidan = np.median(this_arc_obs)
         this_arc_median_std = stats.median_abs_deviation(this_arc_obs)
         this_arc_threshold = this_arc_meidan + num_sigma_clip*this_arc_median_std
-        this_line_x = 0 
+        this_line_x = 0
         # for each line
         for this_line in this_line_list:
             # init x position
@@ -427,7 +432,7 @@ def find_lines(wave_init, arc_obs, arc_line_list, npix_chunk=20, ccf_kernel_widt
                 tlines.append(this_result)
     tlines = table.Table(tlines)
     #print(tlines)
-    print("  |-find_lines: {}/{} lines using GF / CCF!".format(
+    print("  |- find_lines: {}/{} lines using GF / CCF!".format(
         np.sum(np.isfinite(tlines["line_x_gf"])),
         np.sum(np.isfinite(tlines["line_x_ccf"]))
     ))
