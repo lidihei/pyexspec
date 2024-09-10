@@ -104,6 +104,59 @@ class findline():
         self.wave_init = wave_init
         return wave_init
 
+    def grating_equation(self, x, z, deg=4, nsigma=3, min_select=None, verbose=True, **argwords):
+        """
+        Fit a grating equation (1D polynomial function) to data
+        Parameters
+        ----------
+        x : array
+            x coordinates of emission lines
+        z : array
+            The true wavelengths of lines.
+        deg : tuple, optional
+            The degree of the 1D polynomial. The default is (4, 10).
+        nsigma : float, optional
+            The data outside of the nsigma*sigma radius is rejected iteratively. The default is 3.
+        min_select : int or None, optional
+            The minimal number of selected lines. The default is None.
+        verbose :
+            if True, print info
+
+        Returns
+        -------
+        pf1, indselect
+
+        """
+        indselect = np.ones_like(x, dtype=bool)
+        iiter = 0
+        # pf1
+        while True:
+            pf1 = Poly1DFitter(x[indselect], z[indselect], deg=deg, pw=1, robust=False)
+            z_pred = pf1.predict(x)
+            z_res = z_pred - z
+            sigma = np.std(z_res[indselect])
+            indreject = np.abs(z_res[indselect]) > nsigma * sigma
+            n_reject = np.sum(indreject)
+            if n_reject == 0:
+                # no lines to kick
+                break
+            elif isinstance(min_select, int) and min_select >= 0 and np.sum(indselect) <= min_select:
+                # selected lines reach the threshold
+                break
+            else:
+                # continue to reject lines
+                indselect &= np.abs(z_res) < nsigma * sigma
+                iiter += 1
+            if verbose:
+                print("  |-@grating_equation: iter-{} \t{} lines kicked, {} lines left, rms={:.5f} A".format(
+                    iiter, n_reject, np.sum(indselect), sigma))
+        pf1.rms = sigma
+
+        if verbose:
+            print("  |-@grating_equation: {} iterations, rms = {:.5f} A".format(iiter, pf1.rms))
+        return pf1, indselect
+
+
 def grating_equation2D(x, y, z, deg=(4, 10), nsigma=3, min_select=None, verbose=True):
     """
     Fit a grating equation (2D polynomial function) to data

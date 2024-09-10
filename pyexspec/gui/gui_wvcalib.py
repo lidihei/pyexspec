@@ -186,6 +186,16 @@ class WvClibWindow(object):
         self.lineEdit_template = QtWidgets.QLineEdit(self.centralwidget)
         self.lineEdit_template.setGeometry(QtCore.QRect(567, 636, 360, 21))
         self.lineEdit_template.setObjectName("lineEdit_template")
+        ####---- plot template 
+        self.CheckBoxWidget = QtWidgets.QWidget(self.centralwidget)
+        self.CheckBoxWidget.setGeometry(QtCore.QRect(466, 656, 130, 21))
+        self.CheckBoxWidget.setObjectName("CheckBoxWidget")
+        self.layoutCheckBox = QtWidgets.QVBoxLayout(self.CheckBoxWidget)
+        self.layoutCheckBox.setContentsMargins(0, 0, 0, 0)
+        self.checkBox_plotTemplate = QtWidgets.QCheckBox(self.CheckBoxWidget)
+        self.checkBox_plotTemplate.setObjectName("plotTemplate")
+        self.layoutCheckBox.addWidget(self.checkBox_plotTemplate)
+        self.checkBox_plotTemplate.setText("Plot Template")
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)

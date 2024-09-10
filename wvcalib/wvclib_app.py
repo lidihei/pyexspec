@@ -403,15 +403,30 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState()
         except:
             checkBox_xaxis_wave_state = self.checkBox_xaxis_wave.checkState().value
+        try:
+            checkBox_plotTemplate_state = self.checkBox_plotTemplate.checkState()
+        except:
+            checkBox_plotTemplate_state = self.checkBox_plotTemplate.checkState().value
         tab = self.tab_line_order.copy()
         if checkBox_xaxis_wave_state == 0:
             self.xcoord = self.xindex
             self.xscatter = tab[xname]
+            self._wave_template_iorder = np.nan
+            self._flux_template_iorder = np.nan
+            self.plottemplate_bool = False
         else:
             if wvname == 'line':
                 tab = tab[tab['line']>0]
             self.xcoord = self.wave_solus[self.order]
             self.xscatter = tab[wvname]
+            if checkBox_plotTemplate_state and (self.templatefile is not None):
+                self._wave_template_iorder = self.waves_template[self.order]
+                self._flux_template_iorder = self.fluxes_template[self.order]
+                self.plottemplate_bool = True
+            else:
+                self._wave_template_iorder = np.nan
+                self._flux_template_iorder = np.nan
+                self.plottemplate_bool = False
         self.yscatter = tab[yname]
 
     def _draw_scatter_pos(self, ind_currentRow=None, **keywds):
@@ -449,9 +464,16 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         else:
             self.ax.set_xlabel('Wavelength')
         xscatter = self.xscatter
-        yscatter = self.yscatter
+        yscatter = self.yscatter.copy()
         x = self.xcoord
-        flux = self.fluxes[self.order]
+        flux = self.fluxes[self.order].copy()
+        def norm_flux(flux):
+            flux_base, flux_top = np.percentile(flux, (30, 99))
+            fluxnorm = (flux - flux_base)/(flux_top - flux_base)
+            return fluxnorm, flux_base, flux_top
+        if self.plottemplate_bool:
+            fluxnorm,flux_base, flux_top = norm_flux(flux)
+            #yscatter = (yscatter - flux_base)/(flux_top - flux_base)
         #self.figure.clear()
         self.ax.clear()
         self.ax.plot(x, flux, color='k', lw=1, alpha=0.5)
@@ -468,6 +490,11 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         #ax.secondary_xaxis?
         # refresh canvas
         self.ax.set_ylabel('Counts')
+        if self.plottemplate_bool:
+            flux_template_iorder, _, _ = norm_flux(self._flux_template_iorder)
+            flux_template_iorder = flux_template_iorder*(flux_top - flux_base)+flux_base
+            self.ax.plot(self._wave_template_iorder, flux_template_iorder, color='b', lw=1, alpha=0.5, label='Template')
+            self.ax.legend()
         if checkBox_xaxis_wave_state == 0:
             self.ax.set_xlabel('Pixel')
         self.canvas.mpl_connect('button_press_event', self.onclick)
@@ -722,7 +749,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.savedata['tab_lines'] = self.tab_line_all
         self.savedata['nlines'] = np.sum(self.tab_line_all['maskgood'])
         self.savedata['deg'] = (self.fit_deg, 'The degree of the 1or2D polynomial')
-        if slef.autofind_bool:
+        if self.autofind_bool:
             self.savedata['wave_int'] = self.waves_init
         tab = self.tab_line_all
         ind = tab['maskgood'] == 1
