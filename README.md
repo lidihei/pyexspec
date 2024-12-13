@@ -12,7 +12,7 @@ Authors:
 1. install `songcn` package
     - `pip install -U git+git://github.com/lidihei/songcn`
     - `pip show songcn` should be at least `0.0.9`
-1.1.  install 'songcn' package
+    - or install 'songcn' package by
     - `git clone https://github.com/lidihei/songcn.git`
     - `bash install.sh`
 2. install `pyexspec` package
@@ -30,7 +30,8 @@ Authors:
 <p align="center"><img width="100%" src="bfoscE9G10/template/bfoscE9G10_orders_rot90.png" /></p>
    
 
-## bfosc E9G10
+## yfosc E9G10
+<p align="center"><img width="100%" src="yfoscE9G10/template/yfosc_fear.png" /></p>
 
 
 ## Manually callibrate wavelength
@@ -40,6 +41,9 @@ Authors:
 - - Finding the emission line automatically:
 - - - BFOSC E9G10
 - - - - npix_chunck = 8; CCF_Kernel Width = 1.5; num_sigma_clip = 3
+- - - - Fitting Function: Poly2DFitter; Parameter : deg(X) = 4; deg(Y) = 6 
+- - - YFOSC E9G10
+- - - - npix_chunck = 5; CCF_Kernel Width = 1.5; num_sigma_clip = 3
 - - - - Fitting Function: Poly2DFitter; Parameter : deg(X) = 4; deg(Y) = 6 
 
 
