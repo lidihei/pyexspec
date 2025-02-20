@@ -25,6 +25,28 @@ from pyexspec.fitfunc import Poly1DFitter, Poly2DFitter
 from scipy import stats
 
 
+def interp_new(xnew, x, y):
+    '''
+    paramters:
+    -------------
+    xnew: [float or array_like]
+    x : (npoints, ) array_like
+        A 1-D array of real values.
+    y : (..., npoints, ...) array_like
+        A N-D array of real values. The length of `y` along the interpolation
+        axis must be equal to the length of `x`. Use the ``axis`` parameter
+        to select correct axis. Unlike other interpolators, the default
+        interpolation axis is the last axis of `y`.
+    returns:
+    -------------
+    ynew
+    '''
+    #func = interp1d(x, y, kind="linear", fill_value="extrapolate")
+    func = interp1d(x, y, kind="linear", fill_value="extrapolate")
+    ynew = func(xnew)
+    return ynew
+
+
 class findline():
 
     def calCCF(self, xcoord, flux, x_template: np.array = None,
@@ -46,9 +68,11 @@ class findline():
         flux_template = self.flux_template if flux_template is None else flux_template
         xmax = np.min([xcoord[-1], x_template[-1]])
         x = np.arange(xcoord[0], xmax+step, step)
-        shifts = x-xmax/2
-        fluxr = np.interp(x, xcoord, flux)
-        ftmp = np.interp(x, x_template, flux_template)
+        shifts = x-xmax/2 - xcoord[0]/2
+        #fluxr = np.interp(x, xcoord, flux)
+        fluxr = interp_new(x, xcoord, flux)
+        #ftmp = np.interp(x, x_template, flux_template)
+        ftmp = interp_new(x, x_template, flux_template)
         tflux = fft(fluxr)
         tftmp = fft(ftmp)
         conj_tflux = np.conj(tflux)
@@ -76,6 +100,22 @@ class findline():
            plt.ylabel('CCF')
            self.fig_QA_ccf = fig
         return shifts, ccf
+
+    def filter_spec_outlier(self, wave, flux, window = 5, num_sigma_clip = 30):
+        '''
+        filter outlier points of a spectrum
+        parameters:
+        window [int] the uniformed convolution window
+        '''
+        flux = flux*1
+        convolution_array = np.ones(window)/window
+        flux_conv = np.convolve(flux, convolution_array, mode='same')
+        diff_flux = flux - flux_conv
+        sigma = np.std(flux_conv)
+        ind = np.abs(diff_flux) > num_sigma_clip*sigma
+        func = interp1d(wave[~ind], flux[~ind], fill_value="extrapolate")
+        flux[ind] = func(wave[ind])
+        return flux
 
     def estimate_wave_init(self, x: np.array = None, xshift: float=None,
                            x_template = None, wave_template = None,
@@ -389,6 +429,9 @@ def find_lines(wave_init, arc_obs, arc_line_list, npix_chunk=20, ccf_kernel_widt
     # shift: 1-2 pixel
     # typical oversampling: 1/3R --> 3pixel=FWHM
     # LAMOST MRS overestimate: 0.7 / 0.1 --> 7pixel=FWHM
+    arc_line_list = np.sort(arc_line_list)
+    if wave_init[0][-1] - wave_init[0][0] < 0 :
+        arc_line_list = arc_line_list[::-1]
     norder, npix = wave_init.shape
     xcoord = np.arange(npix)
 
@@ -408,7 +451,8 @@ def find_lines(wave_init, arc_obs, arc_line_list, npix_chunk=20, ccf_kernel_widt
         # for each line
         for this_line in this_line_list:
             # init x position
-            this_line_x_init = np.interp(this_line, this_wave_init, xcoord)
+            #this_line_x_init = np.interp(this_line, this_wave_init, xcoord)
+            this_line_x_init = interp_new(this_line, this_wave_init, xcoord)
             this_line_x_init_int = int(this_line_x_init)  # np.argmin(np.abs((this_wave_init-this_line)))
 
             # get a chunk
@@ -429,7 +473,8 @@ def find_lines(wave_init, arc_obs, arc_line_list, npix_chunk=20, ccf_kernel_widt
                     this_line_a_gf = popt[0]
                     this_line_c_gf = popt[2]
                     this_line_x_gf = popt[1]
-                    this_line_wave_init_gf = np.interp(popt[1], xcoord, this_wave_init)
+                    #this_line_wave_init_gf = np.interp(popt[1], xcoord, this_wave_init)
+                    this_line_wave_init_gf = interp_new(popt[1], xcoord, this_wave_init)
                 except:
                     this_line_a_gf = np.nan
                     this_line_c_gf = np.nan
@@ -439,18 +484,29 @@ def find_lines(wave_init, arc_obs, arc_line_list, npix_chunk=20, ccf_kernel_widt
                 try:
                     pccf = ccfmax(this_line_x_init, this_line_xcoord, this_line_arc, width=ccf_kernel_width, method="Nelder-Mead")
                     this_line_x_ccf = np.float64(pccf.x)
-                    this_line_wave_init_ccf = np.interp(this_line_x_ccf, xcoord, this_wave_init)
-                    this_line_peakflux = np.interp(this_line_x_ccf, this_line_xcoord, this_line_arc)
+                    #this_line_wave_init_ccf = np.interp(this_line_x_ccf, xcoord, this_wave_init)
+                    #this_line_peakflux = np.interp(this_line_x_ccf, this_line_xcoord, this_line_arc)
+                    this_line_wave_init_ccf = interp_new(this_line_x_ccf, xcoord, this_wave_init)
+                    if (this_line_xcoord[0]<this_line_x_ccf < this_line_xcoord[-1]):
+                        this_line_peakflux = interp_new(this_line_x_ccf, this_line_xcoord, this_line_arc)
+                    else:
+                        if np.isnan(this_line_x_gf):
+                           this_line_peakflux = np.nan
+                        else:
+                            if (this_line_xcoord[0]<this_line_x_gf < this_line_xcoord[-1]):
+                                this_line_peakflux = interp_new(this_line_x_gf, this_line_xcoord, this_line_arc)
+                            else: this_line_peakflux = np.nan
                 except:
                     this_line_x_ccf = np.nan
                     this_line_wave_init_ccf = np.nan
                     this_line_peakflux = np.nan
-                # sigma clipping
+                if np.isnan(this_line_peakflux): continue
                 if (this_line_x_ccf != np.nan):
                     if (this_line_x_ccf <= this_line_x ):
                         continue
                     else:
                         this_line_x = this_line_x_ccf
+                # sigma clipping
                 if num_sigma_clip > 0:
                     if this_line_peakflux < this_arc_threshold:
                        #print(f'  |- order = {iorder} :this_line_peakflux = {this_line_peakflux}; this_arc_threshold = {this_arc_threshold}')

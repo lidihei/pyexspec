@@ -64,7 +64,8 @@ def vgconv(xinput,yinput,fwhm, ppr=None):
     x = np.linspace(minx,maxx,nel)
     step = x[1] - x[0]
     x = np.exp(x)
-    y = np.interp( x, xinput, yinput)
+    #y = np.interp( x, xinput, yinput)
+    y = interpolate.interp1d(xinput, yinput, kind='linear',fill_value='extrapolate')(x)
     #y = interp_spl( x, xinput, yinput)
   else:
     x = xinput
@@ -186,6 +187,7 @@ def broadspc(wave, flux, R, vsini, epsilon=0.5, R0=300000, waveobs=None):
     else:
         wave_vr, flux_vr = rotconv(x, y, epsilon, vsini)
     if waveobs is not None:
-       flux_vr = np.interp(waveobs, wave_vr, flux_vr)
+       #flux_vr = np.interp(waveobs, wave_vr, flux_vr)
+       flux_vr = interpolate.interp1d(wave_vr, flux_vr, kind='linear',fill_value='extrapolate')(waveobs)
        wave_vr = waveobs
     return wave_vr, flux_vr

@@ -26,6 +26,7 @@ import ccdproc as ccdp
 from photutils.segmentation import detect_sources
 #from pyexspec.findline import find_lines 
 import warnings
+from scipy.interpolate import interp1d
 warnings.filterwarnings('ignore')
 
 #matplotlib.use('Qt5Agg')
@@ -48,11 +49,12 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.setupUi(self)
         self.add_canvas()
         self.order = 0
-        #self.assumption() # debug
+        self.assumption() # debug
         self.initUi()
         # debug
         #self._wd = os.path.dirname(self._arcfile) if wd is None else wd
         self.templatefile = None
+        self.autofind_bool = False
 
     def add_canvas(self):
         self.widget2 = QtWidgets.QWidget(self.centralwidget)
@@ -94,21 +96,24 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
 
 
     def assumption(self):
-        test_dir = "test"
+        #test_dir = "test"
+        #self._wd = test_dir
+        #self._arcfile = os.path.join(self._wd, "test.dump")
+        #test_dir = "../data/yfosc/E9G10/"
+        test_dir = "/Users/lijiao/Documents/works/sdb_BHB_240cm_observation/data/reduce_data/20241029/E9G10/dump/"
         self._wd = test_dir
-        self._arcfile = os.path.join(self._wd, "test.dump")
-        test_dir = "test"
-        self._wd = test_dir
-        self._arcfile = os.path.join(self._wd, "lamp-202403140107_SPECSLAMP_FeAr_slit16s_G10_E9.z")
-        self._wd = '../bfoscE9G10/template'
-        self._arcfile = os.path.join(self._wd, "template_from_202305220046.dump")
+        self._arcfile = os.path.join(self._wd, "lamp-ljg2m401-yf01-20241029-0118-x00.fits.fz.z")
+        #self._wd = '../bfoscE9G10/template'
+        #self._arcfile = os.path.join(self._wd, "template_from_202305220046.dump")
         self._linelistfile = '../arc_linelist/FeAr.dat'
         self.lineEdit_arc.setText(self._arcfile)
         self.lineEdit_linelist.setText(self._linelistfile)
         self._read_linelist(self._linelistfile)
         tablename = os.path.join(self._wd, "TABLE", "table_linelist.csv")
-        tablename = self._arcfile
-        self._read_arc(self._arcfile, tablename=None)
+        #tablename = self._arcfile
+        tablename = None
+        #tablename = os.path.join(self._wd, "TABLE", "table_linelist.csv")
+        self._read_arc(self._arcfile, tablename=tablename)
         self._get_tab_line_order()
         #self._read_arc(self._arcfile, tablename=self._arcfile)
         #self._arcfile = joblib.load(os.path.join(self._wd, "lamp-blue0062.fits_for_blue0060.fits.dump"))
@@ -166,7 +171,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
                 waves_template, fluxes_template = data['wave_solu'], data['flux_arc']
             except:
                 waves_template, fluxes_template = data['wave'], data['flux']
-        if ('.fits' in basename) or ('csv' in basename):
+        elif (('.fits' in basename) or ('csv' in basename)):
             data = Table.read(filename)
             waves_template, fluxes_template = data['wave'], data['flux']
         self.waves_template = waves_template
@@ -190,6 +195,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             self.arcdic = arcdic
         try:
             flux = self.arcdic['flux_arc']
+            if type(flux) is float: flux = self.arcdic['spec_extr']
         except:
             try:
                 flux = self.arcdic['spec_extr']
@@ -568,6 +574,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         '''
         If using Gassian function to find peak, index_window (Ind Windows) is the window width to find max;
         x_window (X Window) is the window width to fit Gaussian function.
+            #self.wv_max = np.interp(ind_max, xarange[ind], x[ind])
         '''
         ds_squared = (x-x_tmp)**2 + (y-y_tmp)**2
         ind_nearest = np.nanargmin(ds_squared)
@@ -596,7 +603,9 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         if checkBox_xaxis_wave_state == 0:
             self.wv_max = np.nan
         else:
-            self.wv_max = np.interp(ind_max, xarange[ind], x[ind])
+            _func = interp1d(xarange[ind], x[ind])
+            #self.wv_max = np.interp(ind_max, xarange[ind], x[ind])
+            self.wv_max = _func(ind_max)
         print(f'[x_max, y_max] = [{x_max}, {y_max}]; ind_max = {ind_max}')
         return ind_max, y_max
 
@@ -748,9 +757,9 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.savedata['wave_solu'] = self.wave_solus
         self.savedata['tab_lines'] = self.tab_line_all
         self.savedata['nlines'] = np.sum(self.tab_line_all['maskgood'])
-        self.savedata['deg'] = (self.fit_deg, 'The degree of the 1or2D polynomial')
+        self.savedata['deg'] = (self.fit_deg, 'The degree of the 1 or 2D polynomial')
         if self.autofind_bool:
-            self.savedata['wave_int'] = self.waves_init
+            self.savedata['wave_init'] = self.waves_init
         tab = self.tab_line_all
         ind = tab['maskgood'] == 1
         rms = np.std(tab[ind]['wv_fit'] - tab[ind]['line'])
@@ -768,6 +777,27 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
                       }
         fname = os.path.join(self._wd, f'arc_template_spec.z')
         joblib.dump(templatedic, fname)
+
+
+    def check_CCF(self, fluxes: np.array = None, fluxes_template: np.array = None,
+                  order: int = 0, step: float = 0.01, cut_x =None, show=True):
+        '''
+        check CCF value of a specific order
+        cut_x [tuple] e.g. cut_x = (200, 1000)
+        '''
+        from pyexspec.wavecalibrate.findlines import findline, find_lines
+        if fluxes is None: fluxes = self.fluxes
+        find_line = findline()
+        if fluxes_template is None: fluxes_template = self.fluxes_template
+        x_template = np.arange(fluxes_template.shape[1])
+        xcoord = np.arange(fluxes.shape[1])
+        flux = fluxes[order]
+        flux_template = fluxes_template[order]
+        if cut_x is not None:
+            cut = slice(*cut_x)
+            xcoord = xcoord[cut]; flux = flux[cut]
+        shifts, ccf = find_line.calCCF(xcoord, flux, x_template, flux_template, step=step, show=show)
+        return shifts, ccf, find_line.xshift
 
     def _autofind(self, waves_init: np.array = None, fluxes: np.array = None, ccf_kernel_width=1.5):
         '''
@@ -787,7 +817,19 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             for _order, flux in enumerate(fluxes):
                 flux_template = fluxes_template[_order]
                 wave_template = waves_template[_order]
-                shifts, ccf = find_line.calCCF(xcoord, flux, x_template, flux_template, show=False)
+                #flux_template = self.filter_spec_outlier(wave_template, wave_template, window = 5, num_sigma_clip = 30)
+                shifts, ccf = find_line.calCCF(xcoord, flux, x_template, flux_template, step=0.01, show=False)
+                if np.abs(find_line.xshift) > 200:
+                    xshift_old = find_line.xshift
+                    flux = find_line.filter_spec_outlier(xcoord, flux, window = 5, num_sigma_clip = 30)
+                    shifts, ccf = find_line.calCCF(xcoord, flux, x_template, flux_template, step=0.01, show=False)
+                    print(f"  |-@ccf with filtering outliers order = {_order}; ccf shift = {find_line.xshift}, the outlier points have been removed when calculating CCF since original shift = {xshift_old} (> 200 pixels)")
+                    if np.abs(find_line.xshift)>200:
+                        cut = slice(200, -200)
+                        shifts, ccf = find_line.calCCF(xcoord[cut], flux[cut], x_template, flux_template, step=0.01, show=False)
+                        print(f"  |-@ccf with slice(200, -200) order = {_order}; ccf shift = {find_line.xshift}, the outlier points have been removed when calculating CCF since original shift = {xshift_old} (> 200 pixels)")
+                else:
+                    print(f"  |-@ccf order = {_order}; ccf shift = {find_line.xshift}")
                 wave_init = find_line.estimate_wave_init(xcoord, find_line.xshift, x_template, wave_template)
                 waves_init[_order] = wave_init
         if waves_init is None: waves_init = self.wave_solus
@@ -807,6 +849,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         self.waves_init = waves_init
         tab_auto_lines = find_lines(waves_init, fluxes, self.linelist, npix_chunk=npix_chunk,
                         ccf_kernel_width=ccf_kernel_width, num_sigma_clip=num_sigma_clip)
+ 
         tab_maskgood = Table(data=[np.ones(len(tab_auto_lines))], names=['maskgood'])
         tab = hstack([tab_auto_lines, tab_maskgood])
         colnames_old = ['line_x_ccf', 'line_wave_init_ccf', 'line_peakflux']

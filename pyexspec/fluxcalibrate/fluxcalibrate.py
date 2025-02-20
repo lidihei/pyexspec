@@ -3,6 +3,7 @@ from pyexspec.utils import sigma_clip, rvcorr_spec
 from pypeit.core import flux_calib
 from scipy import interpolate
 from astropy import constants, units
+from scipy.interpolate import interp1d
 
 class Fcalibrate():
 
@@ -47,7 +48,8 @@ class Fcalibrate():
         fluxobs_err = self.fluxobs_err if fluxobs_err is None else fluxobs_err
         wavesyn = self.wavesyn if wavesyn is None else wavesyn
         fluxsyn = self.fluxsyn if fluxsyn is None else fluxsyn
-        _fluxsyn = np.interp(waveobs, wavesyn, fluxsyn)
+        #_fluxsyn = np.interp(waveobs, wavesyn, fluxsyn)
+        _fluxsyn = interp1d(wavesyn, fluxsyn, kind='linear',fill_value='extrapolate')(waveobs)
         x = waveobs
         rate = _fluxsyn/fluxobs
         if lograte: rate = np.log(rate)
@@ -70,7 +72,7 @@ class Fcalibrate():
 
     def calibrate_flux_poly1d(self, waveobs=None, fluxobs=None, wavesyn=None, fluxsyn=None, fluxobs_err=None,
                               num_sigclip=5, deg=5, min_select=400, verbose=True, lograte=True):
-        ''' 
+        '''
         using np.poly1d to fit fluxsyn/fluxobs then calibrating the observed flux
         polyfit = polyfit(fluxsyn/fluxobs)
         flux_calibrate = fluxobs*polyfit
@@ -84,7 +86,8 @@ class Fcalibrate():
         fluxobs_err = self.fluxobs_err if fluxobs_err is None else fluxobs_err
         wavesyn = self.wavesyn if wavesyn is None else wavesyn
         fluxsyn = self.fluxsyn if fluxsyn is None else fluxsyn
-        _fluxsyn = np.interp(waveobs, wavesyn, fluxsyn)
+        #_fluxsyn = np.interp(waveobs, wavesyn, fluxsyn)
+        _fluxsyn = interp1d(wavesyn, fluxsyn, kind='linear',fill_value='extrapolate')(waveobs)
         x = waveobs.copy()
         rate = _fluxsyn/fluxobs
         if lograte: rate = np.log(rate)  
@@ -217,7 +220,7 @@ class Fcalibrate():
 
         Returns
         -------
-        zeropoint_data: `numpy.ndarray`_ 
+        zeropoint_data: `numpy.ndarray`_
             Sensitivity function with same shape as wave (nspec,)
         zeropoint_data_gpm: `numpy.ndarray`_
             Good pixel mask for sensitivity function with same shape as wave (nspec,)
@@ -230,7 +233,9 @@ class Fcalibrate():
         counts = self.fluxobs_std if counts is None else counts
         counts_ivar = self.fluxobs_std_ivar if counts_ivar is None else counts_ivar
         counts_mask = np.ones_like(counts, dtype=bool) if counts_mask is None else counts_mask
-        if flam_true is None: flam_true = np.interp(wave, self.lam_syn, self.flam_syn)
+        if flam_true is None: 
+            #flam_true = np.interp(wave, self.lam_syn, self.flam_syn)
+            flam_true = interp1d(self.lam_syn, self.flam_syn, kind='linear',fill_value='extrapolate')(wave)
         mask_bad, mask_recomb, mask_tell =\
                     flux_calib.get_mask(wave, counts, counts_ivar, counts_mask,  mask_hydrogen_lines=True,
                                      mask_helium_lines=False, mask_telluric=True, hydrogen_mask_wid=10.0,  trans_thresh=0.9)
@@ -238,7 +243,7 @@ class Fcalibrate():
                     flux_calib.counts2Nlam(wave, counts, counts_ivar, counts_mask,
                                     exptime, airmass, longitude, latitude, extinctfilepar)
         zeropoint_data, zeropoint_data_gpm, zeropoint_fit, zeropoint_fit_gpm =\
-                    flux_calib.standard_zeropoint(wave, Nlam_star, Nlam_ivar_star, mask_bad, 
+                    flux_calib.standard_zeropoint(wave, Nlam_star, Nlam_ivar_star, mask_bad,
                                     flam_true, mask_recomb=mask_recomb,  mask_tell=mask_tell, maxiter=maxiter, upper=upper,
                                     lower=lower, polyorder=polyorder, balm_mask_wid=balm_mask_wid, nresln=nresln, resolution=resolution,
                                     polycorrect=polycorrect, polyfunc=polyfunc, debug=debug)
@@ -248,13 +253,13 @@ class Fcalibrate():
         self.zeropoint_fit_gpm = zeropoint_fit_gpm
         return zeropoint_data, zeropoint_data_gpm, zeropoint_fit, zeropoint_fit_gpm
 
-    def standard_zeropoint_Poly1DFitter(self, wave=None, zeropoint_data=None, zeropoint_data_gpm=None, 
+    def standard_zeropoint_Poly1DFitter(self, wave=None, zeropoint_data=None, zeropoint_data_gpm=None,
                                          num_sigclip=1, deg=10, min_select=400, verbose=True):
         '''
         Using twodspec.polynomial.Poly1DFitter to fit the zeropoint_data
         wave : `numpy.ndarray`_
             wavelength as observed
-        zeropoint_data: `numpy.ndarray`_ 
+        zeropoint_data: `numpy.ndarray`_
             Sensitivity function with same shape as wave (nspec,)
         zeropoint_data_gpm: `numpy.ndarray`_
             Good pixel mask for sensitivity function with same shape as wave (nspec,)

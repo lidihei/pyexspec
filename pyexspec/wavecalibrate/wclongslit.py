@@ -221,7 +221,7 @@ class longslit(findline):
         --------------
         xshift [float]: the x-axis coordinate of the maximum CCF point in unit of pixel.
         '''
-        shfits, ccf = self.calCCF(xcoord, flux, x_template, flux_template, show=show)
+        shfits, ccf = self.calCCF(xcoord, flux, x_template, flux_template, step=step, show=show)
         #print(np.argmax(ccf))
         xshift = shfits[np.argmax(ccf)]
         self.xshift = xshift
