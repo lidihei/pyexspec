@@ -1,0 +1,3 @@
+name,ra,dec,ra_deg,dec_deg,Gmag,standard_type,web,ref
+Vega(Alpha_Lyr),18:36:56.33,+38:47:01.28,279.234734,+38.783688,0,Flux_standard,https://www.eso.org/sci/observing/tools/standards/spectra/hamuystandards.html,Hamuy(1992 1994)
+HIP087998,17:58:30.15,+30:11:21.38,269.625623,+30.189274,4.27,RV_standard,https://cdsarc.cds.unistra.fr/viz-bin/cat/J/A+A/616/A7#/browse,Soubiran2018A&A...616A...7S

@@ -1,0 +1,22 @@
+C.D.S.  -  SIMBAD4 rel 1.8  -  2024.10.25CEST05:03:31
+#The CTIO group headed by M. Hamuy have obtained new observations of 10 secondary spectrophotometric standards (from Taylor, ApJS, 54, 259, 1984) and 19 tertiary spectrophotometric standards from the lists of Stone and Baldwin (MNRAS, 204, 347, 1983) and Stone (ApJ, 218,767, 1977).Two papers detail the observations: the first is devoted to wavelengths from 3300 to 7550Å (Hamuy et al., PASP, 104, 533, 1992); the second to wavelengths from 6000 to 10500Å (Hamuy et al., PASP, 106,566, 1994). The second paper consolidates both sets of observations and presents AB magnitudes for the 10 secondary standards at 16Å intervals from 3300 to about 10400Å and for the 19 tertiary standards at 50Å intervals from 3300 to about 10300Å. The ABMAG is converted to flux (ergs/cm/cm/s/A)  through the formula ABMAG = -2.5 alog10(Fnu) - 48.59 where Fnu is in ergs/cm/cm/s/Hz.
+#https://www.eso.org/sci/observing/tools/standards/spectra/hamuystandards.html
+
+ IdentList
+----------
+
+# |typed ident|            identifier             |typ|       coord1 (ICRS,J2000/2000)        |     coord2 (ICRS,J2000/2000)      | Mag U  | Mag B  | Mag V  | Mag R  | Mag G  | Mag I  |  spec. type   |#bib|#not
+--|-----------|-----------------------------------|---|---------------------------------------|-----------------------------------|--------|--------|--------|--------|--------|--------|---------------|----|----
+1 |HR 718     |* ksi02 Cet                        |*  |02 28 09.5570589539 +08 27 36.216809306|037.0398210789746 +08.4600602248073|4.14    |4.25    |4.30    |4.29    |4.255358|4.34    |B9III          | 344|   0
+2 |HR 1544    |* pi.02 Ori                        |*  |04 50 36.7224881321 +08 54 00.652210041|072.6530103672171 +08.9001811694558|4.39    |4.36    |4.35    |4.29    |4.341834|4.29    |A1Vn           | 188|   0
+3 |HR 3454    |* eta Hya                          |bC*|08 43 13.4757536071 +03 23 55.182801587|130.8061489733629 +03.3986618893297|3.380   |4.100   |4.300   |4.37    |4.267924|4.56    |B3V            | 410|   0
+4 |HR 4468    |* tet Crt                          |PM*|11 36 40.9092052035 -09 48 08.001725582|174.1704550216813 -09.8022227015506|     ~  |4.604   |4.673   |     ~  |4.658411|     ~  |B9.5V          | 218|   0
+5 |HR 4963    |* tet Vir                          |** |13 09 56.9889385680 -05 32 20.414634792|197.4874539107000 -05.5390040652200|     ~  |4.385   |4.397   |     ~  |4.404805|     ~  |A1IVs          | 267|   0
+6 |HR 5501    |* 108 Vir                          |*  |14 45 30.2044637184 +00 43 02.180202816|221.3758519321600 +00.7172722785600|     ~  |5.656   |5.665   |     ~  |5.661195|     ~  |B9.5V          | 161|   0
+7 |HR 7001    |* alf Lyr                          |dS*|18 36 56.33635 +38 47 01.2802          |279.23473479 +38.78368896          |0.03    |0.03    |0.03    |0.07    |     ~  |0.10    |A0Va           |2708|   1
+8 |HR 7596    |* 58 Aql                           |*  |19 54 44.7948526968 +00 16 25.050363384|298.6866452195699 +00.2736251009400|     ~  |5.703   |5.631   |     ~  |5.592933|     ~  |B9IV           | 221|   0
+9 |HR 7950    |* eps Aqr                          |*  |20 47 40.5495728200 -09 29 44.796936843|311.9189565534167 -09.4957769269008|3.79    |3.77    |3.77    |3.70    |3.774703|3.70    |B9.5V          | 287|   0
+10|HR 8634    |* 42 Peg                           |PM*|22 41 27.7207176 +10 49 52.907917      |340.3655029900 +10.8313633103      |3.10    |3.33    |3.41    |3.43    |3.420900|3.50    |B8V            | 315|   0
+11|HR 9087    |* 29 Psc                           |V* |00 01 49.4481127032 -03 01 39.011820024|000.4560338029300 -03.0275032833400|4.47    |4.98    |5.10    |     ~  |5.090039|     ~  |B7III-IV       | 229|   0
+================================================================================
+
