@@ -128,16 +128,16 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/Users/lijiao/Documents/works/sdb_BHB_240cm_observation/data/reduce_data/20241028/E9G10"
+        test_dir = "/Users/lijiao/Documents/works/sdb_BHB_240cm_observation/data/reduce_data/20241125/E9G10"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
         lamp_template = "../template/feartemplate_order0to10_from202410280096.z"
         self._lamp_template = joblib.load(lamp_template)
         self.lineEdit_lamp.setText(lamp_template)
-        apfname = f'{self._wd}/ap.dump'
-        print(apfname)
-        self.ap = joblib.load(apfname)
-        self.ap_trace = self.ap.ap_center_interp
+        #apfname = f'{self._wd}/ap.dump'
+        #print(apfname)
+        #self.ap = joblib.load(apfname)
+        #self.ap_trace = self.ap.ap_center_interp
 
     def initUi(self):
         self.toolButton.clicked.connect(self._select_wd)
