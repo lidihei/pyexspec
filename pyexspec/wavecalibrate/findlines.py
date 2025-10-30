@@ -106,6 +106,8 @@ class findline():
         filter outlier points of a spectrum
         parameters:
         window [int] the uniformed convolution window
+        returns:
+        flux [array] : the flux picked out the ourtliers
         '''
         flux = flux*1
         convolution_array = np.ones(window)/window
@@ -115,6 +117,25 @@ class findline():
         ind = np.abs(diff_flux) > num_sigma_clip*sigma
         func = interp1d(wave[~ind], flux[~ind], fill_value="extrapolate")
         flux[ind] = func(wave[ind])
+        return flux
+
+    def filter_spec_outlier_by_template(self, flux, flux_template, num_sigma_clip=10, niter=3):
+        '''
+        filter outlier points of a spectrum by using the template
+        define: ratio = flux/flux_template
+        linear interpolate the points which ratio > (np.median(ratio) + sigma*np.std(ratio))
+        parameters:
+        niter [int] the number of iteration
+        returns:
+        flux [array]: the flux picked out the ourtliers
+        '''
+        flux = flux*1
+        for i in np.arange(niter):
+            ratio = flux/flux_template
+            x = np.arange(len(flux))
+            ind = ratio > (np.median(ratio) + num_sigma_clip*np.std(ratio))
+            func = interp1d(x[~ind], flux[~ind], fill_value="extrapolate")
+            flux[ind] = func(x[ind])
         return flux
 
     def estimate_wave_init(self, x: np.array = None, xshift: float=None,
@@ -134,11 +155,12 @@ class findline():
            x_template = self.x_template
         if wave_template is None:
            wave_template = self.wave_template
-        pf1, _indselect = self.grating_equation(x_template, wave_template, **argwords)
+        if xshift is None: xshift = self.xshift
+        #pf1, _indselect = self.grating_equation(x_template, wave_template, **argwords)
+        pf1, _indselect = self.grating_equation(x_template-xshift, wave_template, **argwords)
         #self.pf1 = pf1
         if x is None: x = self.x_pypiet
-        if xshift is None: xshift = self.xshift
-        x = x+xshift
+        #x = x+xshift
         self.func_polyfit_template = pf1 # the poly fitted function of template arc lamp sectrum
         wave_init = pf1.predict(x)
         self.wave_init = wave_init
@@ -193,7 +215,7 @@ class findline():
         pf1.rms = sigma
 
         if verbose:
-            print("  |-@grating_equation: {} iterations, rms = {:.5f} A".format(iiter, pf1.rms))
+            print("  |-@grating_equation: {} iterations, deg={},  rms = {:.5f} A".format(iiter, deg, pf1.rms))
         return pf1, indselect
 
 

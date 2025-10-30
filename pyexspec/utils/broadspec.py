@@ -30,7 +30,7 @@ def interp_spl(xout, x, y):
   return(yout)
 
 
-def vgconv(xinput,yinput,fwhm, ppr=None):
+def vgconv(xinput,yinput,fwhm, ppr=None, mode='valid'):
   """convolution with a Gaussian in log lambda scale
   for a constant resolving power
   form [synple.py](https://github.com/callendeprieto/synple)
@@ -79,7 +79,7 @@ def vgconv(xinput,yinput,fwhm, ppr=None):
   kernel = np.exp(-(xx-np.mean(xx))**2/2./sigma**2)
   kernel = kernel/np.sum(kernel)
 
-  y = np.convolve(y,kernel,'valid')
+  y = np.convolve(y,kernel,mode=mode)
   edge = int(npoints/2)
   x = x[edge:-edge]
 
@@ -94,7 +94,7 @@ def vgconv(xinput,yinput,fwhm, ppr=None):
   return x, y
 
 
-def rotconv(xinput,yinput,epsilon, vsini, ppr=None):
+def rotconv(xinput,yinput,epsilon, vsini, ppr=None, mode='valid'):
 
 
   """convolution with a Rotation profile
@@ -149,7 +149,7 @@ def rotconv(xinput,yinput,epsilon, vsini, ppr=None):
   kernel = kernel/np.sum(kernel)
 
 
-  y = np.convolve(y,kernel,'valid')
+  y = np.convolve(y,kernel,mode=mode)
   #print(xinput.size,x.size,y.size)
   edge = int(npoints/2)
   x = x[edge:-edge]

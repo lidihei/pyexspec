@@ -39,3 +39,20 @@ def rvcorr_spec(wave, rv, flux=None, fluxerr=None, wave_new=None, left=np.nan, r
 
 def vacuum2air(self, wave):
     return wave / (1.0 + 2.735182e-4 + 131.4182 / wave**2 + 2.76249e8 / wave**4)
+
+
+def get_loglam(R, lam_start, lam_end, N=3):
+    ''' get log10(lambda) with a proper sample interval
+    parameters:
+    ---------------
+    R: [float] spectral resolution (BFOSC: R ~ 1600)
+    lam_start: [float]: the start of wavelength
+    lam_end: [float]: the end of wavelength
+    N: [int] oversampling, (typical oversampling: N=3 --> 3pixel=FWHM)
+       R = lambda/FWHM --> (log10(lambda))' =1/(lambda*ln(10)) --> FWHM = 1/(R*ln(10))
+    returns:
+    log10lam: [array] log10(lambda)
+    '''
+    deltax = 1/R/N/np.log(10)
+    log10lam = np.arange(np.log10(lam_start), np.log10(lam_end), deltax)
+    return log10lam

@@ -6,7 +6,7 @@ def sigma_clip(yobs, y_predict, indselect, iiter, num_sigclip=3, min_select=100,
     y_predict [array]
     indselect [bool array]
     iiter [int] the ith iteration
-    
+
     example:
     -----------------
     >>>import numpy as np
