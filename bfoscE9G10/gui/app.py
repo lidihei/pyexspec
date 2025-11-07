@@ -125,16 +125,16 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
         # self.setLayout(layout)
 
     def assumption(self):
-        test_dir = "/Users/lijiao/Documents/works/Feige89/data/216cm/20240314_bfosc_liuzhicun/E9G10"
+        test_dir = "/Users/lijiao/Documents/works/Mikhail_Kovalev/data/216cmMikhail_20251025/"
         self._wd = test_dir
         self.lineEdit_wd.setText(test_dir)
         lamp_template = "../template/fear_model_order2_12_from202403140107.dump"
         self._lamp_template = joblib.load(lamp_template)
         self.lineEdit_lamp.setText(lamp_template)
-        apfname = f'{self._wd}/ap.dump'
+        #apfname = f'{self._wd}/ap.dump'
         #print(apfname)
-        self.ap = joblib.load(apfname)
-        self.ap_trace = self.ap.ap_center_interp
+        #self.ap = joblib.load(apfname)
+        #self.ap_trace = self.ap.ap_center_interp
 
     def initUi(self):
         self.toolButton.clicked.connect(self._select_wd)
@@ -1124,7 +1124,8 @@ class UiExtract(QtWidgets.QMainWindow, ExtractWindow, iospec2d):
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     # mainWindow = QtWidgets.QMainWindow()
-    mainprocess = UiExtract(instrument='E9G10')
+    site =EarthLocation.of_site('beijing xinglong observatory')
+    mainprocess = UiExtract(instrument='E9G10', site=site)
     # ui.setupUi(mainWindow)
     # ui.initUi(mainWindow)
     mainprocess.show()
