@@ -299,7 +299,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         if (ext == '.dump') or (ext == '.z'):
             self.arcdic = joblib.load(fileName)
         elif (ext == '.fits') or (ext=='.csv'):
-            data = Table.read(fileNmae)
+            data = Table.read(fileName)
             arcdic = {'flux' : np.array(data['flux'])}
             self.arcdic = arcdic
         try:
@@ -891,7 +891,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
         except:
             ydeg = 1
         tab = self.tab_line_all.copy()
-        x, y, z, indselect = tab['xcoord'],17- tab['order'], tab['line'], tab['maskgood']
+        x, y, z, indselect = tab['xcoord'],tab['order'], tab['line'], tab['maskgood']
         indselect = np.array(indselect, dtype=bool)
         print(f'np.sum(indselect) = {np.sum(indselect)}')
         if Fittername == 'Poly1DFitter':
@@ -905,7 +905,7 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             deg = (xdeg, ydeg)
             Polyfunc = Fitter(x[indselect], y[indselect], z[indselect], deg=deg, pw=1, robust=False)
             wv_fit = Polyfunc.predict(x, y)
-            wave_solu = Polyfunc.predict(self.Xgrid, 17-self.Ygrid)
+            wave_solu = Polyfunc.predict(self.Xgrid, self.Ygrid)
         self.Polyfunc = Polyfunc
         self.wave_solus = wave_solu
         tab['wv_fit'] = wv_fit
