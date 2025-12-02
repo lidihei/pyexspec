@@ -349,10 +349,10 @@ class UiWvcalib(QtWidgets.QMainWindow, WvClibWindow):
             if colnames is None:
                colnames = ['order', 'xcoord', 'line', 'maskgood', 'wv_fit', 'Fpeak']
             tab = Table(data=np.zeros(len(colnames)).T, names=colnames)
+            tab['maskgood'] = np.array([1], dtype=bool)
         else:
             tab = Table(data=np.zeros(len(dtype)).T, dtype=dtype)
         tab['order'] = self.order
-        tab['maskgood'] = np.array([1], dtype=bool)
         return tab
 
     def _read_linetable(self, Norder=None, tablename=None, table=None):
